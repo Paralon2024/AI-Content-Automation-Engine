@@ -14,7 +14,7 @@ The project uses a **Tools & Pipelines** architecture: reusable integrations liv
 - Manage background music and mix it into the final video.
 - Assemble and download the finished MP4.
 
-> **Current workflow note:** The web application currently expects scene videos to be uploaded by the user. The image-generation, Midjourney/Discord, and Gemini video-generation modules are separate integrations and are not yet connected to the main web workflow. The legacy Veo video endpoint needs migration before it can be used.
+> **Current workflow note:** The web application currently expects scene videos to be uploaded by the user. The image-generation, Midjourney/Discord, and Gemini video-generation modules are separate integrations and are not yet connected to the main web workflow. The Gemini video module now uses the Gemini Omni Interactions API and requires a billed Tier 1 Gemini API project.
 
 ## Requirements
 
