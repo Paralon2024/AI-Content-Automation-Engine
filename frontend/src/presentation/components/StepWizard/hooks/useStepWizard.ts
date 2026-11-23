@@ -67,8 +67,18 @@ export function useStepWizard(idea: Idea, onUpdate: () => void): StepWizardState
   }, [idea.id])
 
   useEffect(() => {
-    const steps = [scriptStep, audioStep, syncStep, assemble]
+    const steps = [scriptStep, audioStep, syncStep, subsStep, assemble]
     for (const step of steps) {
+      if (step.failed && !step.handled.current) {
+        step.handled.current = true
+        if (step === subsStep) pendingMusic.current = null
+        step.clear()
+        onUpdate()
+      }
+    }
+
+    const successfulSteps = [scriptStep, audioStep, syncStep, assemble]
+    for (const step of successfulSteps) {
       if (step.done && !step.handled.current) {
         step.handled.current = true
         step.clear()
@@ -86,7 +96,7 @@ export function useStepWizard(idea: Idea, onUpdate: () => void): StepWizardState
         api.assemble(idea.id, opts).then(jobId => assemble.start(jobId))
       }
     }
-  }, [scriptStep.done, audioStep.done, syncStep.done, subsStep.done, assemble.done, onUpdate, idea.id])
+  }, [scriptStep.done, scriptStep.failed, audioStep.done, audioStep.failed, syncStep.done, syncStep.failed, subsStep.done, subsStep.failed, assemble.done, assemble.failed, onUpdate, idea.id])
 
   const handleScript = useCallback(async (form: ScriptFormData) => {
     setShowForm(false)
