@@ -232,12 +232,24 @@ async def upload_videos(
         if Path((file.filename or "").replace("\\", "/")).suffix.lower() != ".mp4":
             raise HTTPException(415, f"Only MP4 scene videos are supported: {file.filename}")
 
-    for i, file in enumerate(sorted_files, start=1):
-        target = videos_dir / f"scene_{i:04d}.mp4"
-        temporary = target.with_name(target.name + ".uploading")
-        total_size = 0
-        try:
-            with temporary.open("wb") as destination:
+    # Stage and validate every upload before touching the currently usable scenes.
+    # The backup/rollback phase keeps the old set intact if any replacement fails.
+    import uuid
+
+    transaction_id = uuid.uuid4().hex
+    staging_dir = videos_dir / f".upload-{transaction_id}"
+    backup_dir = videos_dir / f".backup-{transaction_id}"
+    staging_dir.mkdir()
+    backup_dir.mkdir()
+    old_state = idea.state
+    installed_targets: list[Path] = []
+    backed_up_targets: list[tuple[Path, Path]] = []
+
+    try:
+        for i, file in enumerate(sorted_files, start=1):
+            staged_target = staging_dir / f"scene_{i:04d}.mp4"
+            total_size = 0
+            with staged_target.open("wb") as destination:
                 while chunk := await file.read(1024 * 1024):
                     total_size += len(chunk)
                     if total_size > 500 * 1024 * 1024:
@@ -246,16 +258,35 @@ async def upload_videos(
                             f"Scene video is too large (500 MB maximum): {file.filename}",
                         )
                     destination.write(chunk)
-            with temporary.open("rb") as uploaded_file:
+            with staged_target.open("rb") as uploaded_file:
                 if b"ftyp" not in uploaded_file.read(16):
                     raise HTTPException(415, f"Invalid MP4 file: {file.filename}")
-            temporary.replace(target)
-        except Exception:
-            temporary.unlink(missing_ok=True)
-            raise
 
-    idea.state = State.VIDEOS_GENERATED
-    st.save(idea)
+        for existing in videos_dir.glob("scene_*.mp4"):
+            backup = backup_dir / existing.name
+            existing.replace(backup)
+            backed_up_targets.append((backup, existing))
+
+        for staged in sorted(staging_dir.glob("scene_*.mp4")):
+            target = videos_dir / staged.name
+            staged.replace(target)
+            installed_targets.append(target)
+
+        idea.state = State.VIDEOS_GENERATED
+        st.save(idea)
+    except Exception:
+        idea.state = old_state
+        for target in installed_targets:
+            target.unlink(missing_ok=True)
+        for backup, original in reversed(backed_up_targets):
+            if backup.exists():
+                backup.replace(original)
+        raise
+    finally:
+        import shutil
+        shutil.rmtree(staging_dir, ignore_errors=True)
+        shutil.rmtree(backup_dir, ignore_errors=True)
+
     return {"id": idea.id, "state": idea.state, "files_uploaded": len(sorted_files)}
 
 
