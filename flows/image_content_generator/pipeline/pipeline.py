@@ -270,6 +270,14 @@ class Pipeline(BaseModelTool):
                 idea_obj.id, self.AUDIOS_DIR, chunk_filename
             )
 
+            # WhisperTool stores transcription output beside the WAV file. Always
+            # invalidate it before generating a replacement batch so a failed prior
+            # attempt cannot reuse stale segment timings for different audio.
+            transcription_cache_path = chunk_audio_path.with_name(
+                chunk_audio_path.name + ".json"
+            )
+            transcription_cache_path.unlink(missing_ok=True)
+
             Messenger.info(f"Synthesizing audio for Batch {batch_num}...")
             chunk_text = "\n\n".join([s.narration for s in chunk])
             formatted_audio = self.prompt_manager.get_audio_prompt(chunk_text)
@@ -325,8 +333,9 @@ class Pipeline(BaseModelTool):
                     duration=duration
                 )
 
-            # 7. Cleanup chunk audio
+            # 7. Cleanup temporary batch audio and its Whisper transcription cache
             chunk_audio_path.unlink(missing_ok=True)
+            transcription_cache_path.unlink(missing_ok=True)
 
         # Final Update
         idea_obj.state = State.AUDIO_GENERATED
