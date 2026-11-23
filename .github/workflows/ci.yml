@@ -1,8 +1,5 @@
 name: CI
 
-permissions:
-  contents: write
-
 on:
   push:
     branches:
@@ -55,32 +52,11 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Refresh lockfile for declared dependency versions
-        run: npm install --package-lock-only --ignore-scripts
-
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Apply frontend security updates
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/english-translation-api-audit' && !contains(github.event.head_commit.message, '[deps updated]') }}
-        run: npm audit fix --force
-
       - name: Audit frontend dependencies
-        run: npm audit --audit-level=high
+        run: npm audit --audit-level=moderate
 
       - name: Type-check and build
         run: npm run build
-
-      - name: Commit security updates
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/english-translation-api-audit' && !contains(github.event.head_commit.message, '[deps updated]') }}
-        working-directory: .
-        run: |
-          if git diff --quiet -- frontend/package.json frontend/package-lock.json; then
-            echo "No dependency changes were needed."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/package.json frontend/package-lock.json
-          git commit -m "chore(frontend): patch npm advisories [deps updated]"
-          git push origin HEAD:english-translation-api-audit
