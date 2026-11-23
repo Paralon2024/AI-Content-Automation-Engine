@@ -205,7 +205,7 @@ export default function ApiKeyModal({ onClose }: Props) {
       <Modal>
         <Title>Gemini API Key</Title>
         <Subtitle>
-          Enter your Google Gemini API key. It is stored locally in <code>config.json</code> — no necesitas configurar variables de entorno.
+          Enter your Google Gemini API key. It is stored locally in <code>config.json</code> — no environment variables are required.
         </Subtitle>
 
         {configured && (
