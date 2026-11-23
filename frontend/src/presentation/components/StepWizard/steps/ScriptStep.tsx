@@ -41,18 +41,18 @@ export default function ScriptStep({
             <>
               <ScriptForm initial={idea.form ?? DEFAULT_FORM} onSubmit={onSubmit} />
               <UploadLink onClick={() => onSetScriptMode('upload')}>
-                ¿Ya tienes un script? Subir archivo JSON
+                Already have a script? Upload a JSON file
               </UploadLink>
             </>
           ) : (
             <UploadWrap>
               <BackLink onClick={() => onSetScriptMode('generate')}>
-                ← Volver a generar con IA
+                ← Back to AI generation
               </BackLink>
               <JsonUploadZone>
                 <input type="file" accept=".json,application/json" onChange={handleFileChange} disabled={uploadingScript} />
-                {uploadingScript ? '⏳ Subiendo…' : '↑ Selecciona un script.json'}
-                <span style={{ fontSize: '11px', opacity: 0.6 }}>Debe cumplir el esquema VideoScript</span>
+                {uploadingScript ? '⏳ Uploading…' : '↑ Select a script.json'}
+                <span style={{ fontSize: '11px', opacity: 0.6 }}>Must match the VideoScript schema</span>
               </JsonUploadZone>
             </UploadWrap>
           )}
