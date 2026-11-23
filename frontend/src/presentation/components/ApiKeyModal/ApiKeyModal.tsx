@@ -205,17 +205,17 @@ export default function ApiKeyModal({ onClose }: Props) {
       <Modal>
         <Title>Gemini API Key</Title>
         <Subtitle>
-          Ingresa tu API key de Google Gemini. Se guarda localmente en <code>config.json</code> — no necesitas configurar variables de entorno.
+          Enter your Google Gemini API key. It is stored locally in <code>config.json</code> — no necesitas configurar variables de entorno.
         </Subtitle>
 
         {configured && (
           <ConfiguredBadge style={{ marginBottom: 16 }}>
             <Dot />
-            Key configurada {source === 'env' ? '(desde variable de entorno)' : '(desde config.json)'}
+            Key configured {source === 'env' ? '(from environment variable)' : '(from config.json)'}
           </ConfiguredBadge>
         )}
 
-        <Label>Nueva key</Label>
+        <Label>New key</Label>
         <InputRow>
           <Input
             ref={inputRef}
@@ -226,16 +226,16 @@ export default function ApiKeyModal({ onClose }: Props) {
             onKeyDown={e => e.key === 'Enter' && handleSave()}
           />
           <BtnSave onClick={handleSave} disabled={saving || !value.trim()}>
-            {saving ? '…' : 'Guardar'}
+            {saving ? '…' : 'Save'}
           </BtnSave>
         </InputRow>
 
         <Status $ok={status === 'ok'} $err={status === 'err'}>
-          {status === 'ok' ? '✓ Key guardada correctamente' : status === 'err' ? '✗ Error al guardar la key' : ' '}
+          {status === 'ok' ? '✓ Key saved successfully' : status === 'err' ? '✗ Error saving the key' : ' '}
         </Status>
 
         <Footer>
-          <BtnClose onClick={onClose}>Cerrar</BtnClose>
+          <BtnClose onClick={onClose}>Close</BtnClose>
         </Footer>
       </Modal>
     </Overlay>
