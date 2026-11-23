@@ -46,7 +46,7 @@ async def upload_tracks(
     files: list[UploadFile] = File(...),
     folder: str = Form(""),
 ) -> dict[str, list[str]]:
-    dest_dir = _safe_path(folder) if folder else _LIBRARY
+    dest_dir = _safe_path(folder) if folder else _LIBRARY.resolve()
     dest_dir.mkdir(parents=True, exist_ok=True)
     uploaded: list[str] = []
     for file in files:
@@ -64,6 +64,8 @@ async def upload_tracks(
 
 @router.post("/folder")
 def create_folder(name: str = Form(...), parent: str = Form("")) -> dict[str, str]:
+    if not name.strip() or name in {".", ".."}:
+        raise HTTPException(422, "Folder name is required")
     target = _safe_path(f"{parent}/{name}" if parent else name)
     target.mkdir(parents=True, exist_ok=True)
     return {"path": str(target.relative_to(_LIBRARY))}
@@ -80,6 +82,8 @@ def stream_track(path: str) -> FileResponse:
 
 @router.delete("/{path:path}")
 def delete_entry(path: str) -> dict[str, str]:
+    if not path.strip():
+        raise HTTPException(400, "Cannot delete the music library root")
     target = _safe_path(path)
     if not target.exists():
         raise HTTPException(404, "Not found")
