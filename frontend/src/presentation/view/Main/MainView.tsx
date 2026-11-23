@@ -54,7 +54,7 @@ export default function MainView() {
         </HeaderLogo>
         <ApiKeyBtn
           onClick={() => setShowApiKey(true)}
-          title={keyConfigured ? 'Gemini key configurada' : 'Configurar Gemini API key'}
+          title={keyConfigured ? 'Gemini API key configured' : 'Configure Gemini API key'}
         >
           <ApiKeyDot $ok={keyConfigured === true} />
           Gemini Key
@@ -78,7 +78,7 @@ export default function MainView() {
           ) : (
             <EmptyState>
               <EmptyIcon>✦</EmptyIcon>
-              <p>Selecciona una idea o genera una nueva</p>
+              <p>Select an idea or create a new one</p>
             </EmptyState>
           )}
         </Main>
