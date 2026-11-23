@@ -88,7 +88,27 @@ def run_in_job(job_id: str, fn: object) -> None:
         _job_states.move_to_end(job_id)
         while len(_job_states) > _MAX_RETAINED_JOB_STATES:
             _job_states.popitem(last=False)
-        _put(job_id, "__FAILED__" if failed else _DONE)
+        terminal = "__FAILED__" if failed else _DONE
+
+        # Enqueue the terminal event before dropping the queue from the registry.
+        # Existing stream generators retain their local queue reference; reconnects
+        # after completion use the bounded terminal-state registry above.
+        if _loop and _loop.is_running():
+            def finalize() -> None:
+                q = _jobs.get(job_id)
+                if q is not None:
+                    if q.full():
+                        try:
+                            q.get_nowait()
+                        except asyncio.QueueEmpty:
+                            pass
+                    try:
+                        q.put_nowait(terminal)
+                    except asyncio.QueueFull:
+                        pass
+                    _jobs.pop(job_id, None)
+
+            _loop.call_soon_threadsafe(finalize)
 
 
 async def stream_job(job_id: str) -> AsyncGenerator[str, None]:
@@ -112,10 +132,8 @@ async def stream_job(job_id: str) -> AsyncGenerator[str, None]:
             continue
         if msg == _DONE:
             yield "[DONE]"
-            _jobs.pop(job_id, None)
             return
         if msg == "__FAILED__":
             yield "[FAILED]"
-            _jobs.pop(job_id, None)
             return
         yield msg
