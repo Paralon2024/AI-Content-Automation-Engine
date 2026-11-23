@@ -151,7 +151,7 @@ export default function MusicLibrary({ selected, onSelect, volume = 1 }: Props) 
 
   const handleDelete = useCallback(async (path: string, isDir: boolean) => {
     const label = isDir ? `the folder "${path}" and its contents` : `"${path}"`
-    if (!confirm(`¿Delete ${label}?`)) return
+    if (!confirm(`Delete ${label}?`)) return
     await api.music.delete(path)
     if (selected === path) onSelect('')
     if (previewing === path) setPreviewing('')
@@ -211,8 +211,8 @@ export default function MusicLibrary({ selected, onSelect, volume = 1 }: Props) 
         <span>
           {uploading ? 'Uploading…'
           : dragging > 0 ? 'Drop files here'
-          : nodes.length === 0 ? 'Arrastra tracks de audio aquí\no haz clic para seleccionar'
-          : 'Arrastra más tracks aquí o haz clic'}
+          : nodes.length === 0 ? 'Drag audio tracks here\nor click to select'
+          : 'Drop more tracks here or click to select'}
         </span>
         <input
           type="file"
