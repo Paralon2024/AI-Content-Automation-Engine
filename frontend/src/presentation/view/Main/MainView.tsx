@@ -3,6 +3,7 @@ import { Idea } from '../../tools/types'
 import { api } from '../../tools/api'
 import IdeaList from '../../components/IdeaList/IdeaList'
 import StepWizard from '../../components/StepWizard/StepWizard'
+import Hans4Workspace from '../../components/Hans4Workspace/Hans4Workspace'
 import ApiKeyModal from '../../components/ApiKeyModal/ApiKeyModal'
 import {
   AppLayout, Header, HeaderLogo, LogoDot, HeaderTitle,
@@ -14,6 +15,7 @@ export default function MainView() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768)
   const [showApiKey, setShowApiKey] = useState(false)
+  const [hans4Open, setHans4Open] = useState(false)
   const [keyConfigured, setKeyConfigured] = useState<boolean | null>(null)
 
   const fetchIdeas = useCallback(async () => {
@@ -26,6 +28,7 @@ export default function MainView() {
   const handleCreated = useCallback((idea: Idea) => {
     setIdeas(prev => [...prev, idea])
     setSelectedId(idea.id)
+    setHans4Open(false)
   }, [])
 
   const checkKey = useCallback(async () => {
@@ -52,6 +55,12 @@ export default function MainView() {
           <LogoDot />
           <HeaderTitle>Content Engine</HeaderTitle>
         </HeaderLogo>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {selectedId !== null && (
+            <ApiKeyBtn type="button" onClick={() => setHans4Open(v => !v)} title="Open the local Hans4 character bible and image handoff">
+              {hans4Open ? 'Back to idea' : 'Hans4 Studio'}
+            </ApiKeyBtn>
+          )}
         <ApiKeyBtn
           onClick={() => setShowApiKey(true)}
           title={keyConfigured ? 'Gemini API key configured' : 'Configure Gemini API key'}
@@ -59,6 +68,7 @@ export default function MainView() {
           <ApiKeyDot $ok={keyConfigured === true} />
           Gemini Key
         </ApiKeyBtn>
+        </div>
       </Header>
 
       <Layout>
@@ -68,12 +78,13 @@ export default function MainView() {
             selectedId={selectedId}
             isOpen={sidebarOpen}
             onToggle={() => setSidebarOpen(o => !o)}
-            onSelect={setSelectedId}
+            onSelect={id => { setSelectedId(id); setHans4Open(false) }}
             onCreated={handleCreated}
           />
         </Sidebar>
         <Main>
           {selectedIdea ? (
+            hans4Open ? <Hans4Workspace ideaId={selectedIdea.id} onClose={() => setHans4Open(false)} /> :
             <StepWizard idea={selectedIdea} onUpdate={fetchIdeas} />
           ) : (
             <EmptyState>
