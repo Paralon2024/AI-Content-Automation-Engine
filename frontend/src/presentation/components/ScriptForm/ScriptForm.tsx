@@ -125,7 +125,7 @@ export default function ScriptForm({ initial, onSubmit }: ScriptFormProps) {
       <Field>
         <Label>Idea / Topic *</Label>
         <TextArea
-          placeholder="Ej: The 50/30/20 rule for saving money and achieving financial freedom..."
+          placeholder="e.g. The 50/30/20 rule for saving money and achieving financial freedom..."
           value={data.idea}
           onChange={e => set('idea', e.target.value)}
         />
