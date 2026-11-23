@@ -9,7 +9,7 @@ from tools.common.messenger import Messenger
 
 
 class GeminiAudioGenerator(GeminiBase):
-    tts_model: str = "gemini-2.5-flash-preview-tts"
+    tts_model: str = "gemini-3.1-flash-tts-preview"
     voice_name: str = "Fenrir"
 
     def text_to_speech(
