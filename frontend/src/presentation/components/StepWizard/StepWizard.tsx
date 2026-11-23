@@ -69,7 +69,7 @@ export default function StepWizard({ idea, onUpdate }: Props) {
         <ProductionStep
           base={base} level={w.level}
           subsStep={w.subsStep} assembleStep={w.assemble}
-          onSubs={w.handleSubs}
+          onSubs={w.handleSubs} onAssemble={w.handleAssemble}
         />
       )
       default: return null
