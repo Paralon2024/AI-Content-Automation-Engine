@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 
 router = APIRouter(prefix="/api/music", tags=["music"])
 
-_LIBRARY = Path("flows/image_content_generator/resource/bg-music")
+_LIBRARY = Path("flows/image_content_generator/resource/bg-music").resolve()
 
 _AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".aac", ".m4a", ".flac"}
 
