@@ -14,9 +14,10 @@ interface Props {
   subsStep: JobStep
   assembleStep: JobStep
   onSubs: (opts: MusicOpts) => void
+  onAssemble: (opts: MusicOpts) => void
 }
 
-export default function ProductionStep({ base, level, subsStep, assembleStep, onSubs }: Props) {
+export default function ProductionStep({ base, level, subsStep, assembleStep, onSubs, onAssemble }: Props) {
   const [selectedPath, setSelectedPath] = useState('')
   const [volume, setVolume] = useState(18)
 
@@ -78,6 +79,20 @@ export default function ProductionStep({ base, level, subsStep, assembleStep, on
           </ActionRow>
         )}
 
+
+        {(level === 5 || level === 6) && (
+          <ActionRow>
+            <BtnPrimary
+              onClick={() => onAssemble({ musicPath: selectedPath, bgVolume: volume / 100 })}
+              disabled={!selectedPath}
+            >
+              {level === 5 ? 'Resume: add music and finalize video' : 'Resume: finalize video'}
+            </BtnPrimary>
+            {!selectedPath && (
+              <MusicHint>Select a music track to resume production.</MusicHint>
+            )}
+          </ActionRow>
+        )}
 
         {level === 7 && (
           <ActionRow>
