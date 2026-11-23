@@ -28,6 +28,6 @@ class GeminiTextGenerator(GeminiBase):
         self._extract_usage(response, self.text_model)
 
         if not response.text:
-            raise RuntimeError("❌ No hay respuesta de Gemini")
+            raise RuntimeError("❌ Gemini returned no response")
 
         return schema.model_validate_json(response.text)
