@@ -61,7 +61,10 @@ def create_idea(
 async def stream(job_id: str) -> StreamingResponse:
     async def _gen() -> AsyncGenerator[str, None]:
         async for msg in job_manager.stream_job(job_id):
-            yield f"data: {msg}\n\n"
+            if msg == ": keep-alive":
+                yield ": keep-alive\\n\\n"
+            else:
+                yield f"data: {msg}\\n\\n"
 
     return StreamingResponse(
         _gen(),
