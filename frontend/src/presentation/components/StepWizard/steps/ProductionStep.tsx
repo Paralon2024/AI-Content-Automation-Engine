@@ -85,7 +85,7 @@ export default function ProductionStep({ base, level, subsStep, assembleStep, on
               onClick={() => onSubs({ musicPath: selectedPath, bgVolume: volume / 100 })}
               disabled={!selectedPath}
             >
-              ↺ Regenerar
+              ↺ Regenerate
             </BtnSecondary>
             {!selectedPath && (
               <MusicHint>Select a music track to regenerate.</MusicHint>
