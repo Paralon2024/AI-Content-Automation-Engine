@@ -209,6 +209,22 @@ async def upload_videos(
     videos_dir.mkdir(parents=True, exist_ok=True)
 
     sorted_files = sorted(files, key=lambda f: f.filename or "")
+
+    script_path = _out(orientation) / "ideas" / f"idea_{idea_id:06d}" / "script.json"
+    if not script_path.is_file():
+        raise HTTPException(409, "Generate or upload the script before uploading scene videos")
+    try:
+        script = VideoScript.model_validate_json(script_path.read_bytes())
+    except Exception as exc:
+        raise HTTPException(422, "The project's script.json is invalid") from exc
+
+    expected_scenes = len(script.scenes)
+    if len(sorted_files) != expected_scenes:
+        raise HTTPException(
+            422,
+            f"Expected {expected_scenes} scene videos for this script; received {len(sorted_files)}",
+        )
+
     for file in sorted_files:
         if Path((file.filename or "").replace("\\", "/")).suffix.lower() != ".mp4":
             raise HTTPException(415, f"Only MP4 scene videos are supported: {file.filename}")
