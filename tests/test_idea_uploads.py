@@ -115,6 +115,54 @@ class UploadEndpointTests(unittest.TestCase):
         self.assertEqual((self.idea_dir / "script.json").read_bytes(), existing)
         self.assertEqual(self.store.get_by_id(1).state, State.NEW)
 
+    def test_script_upload_rolls_back_when_metadata_save_fails(self):
+        old_script = b'{"old":"script"}'
+        script_path = self.idea_dir / "script.json"
+        script_path.write_bytes(old_script)
+        idea = self.idea
+
+        class FailingStore:
+            def get_by_id(self, idea_id):
+                return idea
+
+            def save(self, record):
+                raise OSError("simulated metadata persistence failure")
+
+        with patch.object(ideas_router, "_store", return_value=FailingStore()):
+            with self.assertRaisesRegex(OSError, "simulated metadata persistence failure"):
+                asyncio.run(
+                    ideas_router.upload_script(
+                        1, upload("script.json", valid_script()), title="New title",
+                        orientation=self.orientation,
+                    )
+                )
+
+        self.assertEqual(script_path.read_bytes(), old_script)
+        self.assertEqual(idea.title, "Original title")
+        self.assertEqual(idea.state, State.NEW)
+        self.assertEqual(list(self.idea_dir.glob(".script-*.bak")), [])
+
+    def test_video_upload_installs_expected_scene_set(self):
+        (self.idea_dir / "script.json").write_bytes(valid_script())
+        videos_dir = self.idea_dir / "videos"
+        videos_dir.mkdir()
+        stale = videos_dir / "scene_0002.mp4"
+        stale.write_bytes(b"stale")
+        mp4 = bytes.fromhex("000000186674797069736f6d") + b"-clip"
+
+        result = asyncio.run(
+            ideas_router.upload_videos(
+                1, [upload("scene.mp4", mp4)], orientation=self.orientation
+            )
+        )
+
+        self.assertEqual(result["files_uploaded"], 1)
+        self.assertEqual(self.store.get_by_id(1).state, State.VIDEOS_GENERATED)
+        self.assertEqual((videos_dir / "scene_0001.mp4").read_bytes(), mp4)
+        self.assertFalse(stale.exists())
+        self.assertEqual(list(videos_dir.glob(".upload-*")), [])
+        self.assertEqual(list(videos_dir.glob(".backup-*")), [])
+
     def test_video_upload_rejects_scene_count_mismatch_before_replacing_files(self):
         (self.idea_dir / "script.json").write_bytes(valid_script(scene_count=2))
         videos_dir = self.idea_dir / "videos"
