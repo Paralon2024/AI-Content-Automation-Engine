@@ -195,6 +195,7 @@ async def upload_script(
     backup_script = idea_dir / f".script-{transaction_id}.bak"
     old_title = idea.title
     old_state = idea.state
+    new_script_installed = False
 
     # Stage the new script and preserve the previous one until metadata is saved.
     try:
@@ -202,6 +203,7 @@ async def upload_script(
         if script_path.exists():
             script_path.replace(backup_script)
         staged_script.replace(script_path)
+        new_script_installed = True
 
         if title:
             idea.title = title
@@ -210,7 +212,8 @@ async def upload_script(
     except Exception:
         idea.title = old_title
         idea.state = old_state
-        script_path.unlink(missing_ok=True)
+        if new_script_installed:
+            script_path.unlink(missing_ok=True)
         if backup_script.exists():
             # If restoration fails, leave the backup in place for manual recovery.
             backup_script.replace(script_path)
