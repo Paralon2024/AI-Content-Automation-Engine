@@ -7,7 +7,7 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
-      # Volumen persistente para el modelo whisper (fuera del bind mount de /app)
+      # Persistent volume for the Whisper model (outside the /app bind mount)
       - whisper_model:/opt/whisper
     environment:
       - PYTHONUNBUFFERED=1
@@ -20,7 +20,7 @@ services:
       - "5678:5678"
     volumes:
       - ./frontend:/app
-      # Preservar node_modules del contenedor (no sobreescribir con los del host)
+      # Preserve the container's node_modules (do not overwrite them with host files)
       - /app/node_modules
     environment:
       - VITE_BACKEND_HOST=http://backend:8000
