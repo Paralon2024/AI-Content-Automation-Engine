@@ -20,15 +20,15 @@ export default function VideosStep({ idea, base, level, reupload, onSetReupload,
           ideaId={idea.id}
           endpoint="videos"
           accept=".mp4"
-          label="Arrastra los videos o haz clic para seleccionar"
-          hint="Solo .mp4 — se ordenan por nombre"
+          label="Drag and drop videos here or click to select"
+          hint="MP4 files only — sorted by filename"
           onUploaded={() => { onSetReupload(false); onUploaded() }}
         />
       )}
       {level >= 2 && !reupload && (
         <>
           <ActionRow>
-            <BtnSecondary onClick={() => onSetReupload(true)}>↺ Resubir videos</BtnSecondary>
+            <BtnSecondary onClick={() => onSetReupload(true)}>↺ Re-upload videos</BtnSecondary>
           </ActionRow>
           <VideoSequence baseUrl={base} synced={false} />
         </>
