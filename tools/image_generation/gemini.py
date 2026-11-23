@@ -11,7 +11,7 @@ from tools.image_generation.midjourney import ImageTask
 
 
 class GeminiImageGenerator(GeminiBase):
-    image_model: str = "gemini-3.1-flash-image-preview"
+    image_model: str = "gemini-nano-banana-2.1"
     aspect_ratio: str
     style_references: List[Path] = []
 
