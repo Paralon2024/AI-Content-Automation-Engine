@@ -4,6 +4,7 @@ from typing import Any, List, Optional, cast
 
 from google.genai import types
 from PIL import Image
+from pydantic import Field
 
 from tools.common.gemini_base import GeminiBase
 from tools.common.messenger import Messenger
@@ -13,7 +14,7 @@ from tools.image_generation.midjourney import ImageTask
 class GeminiImageGenerator(GeminiBase):
     image_model: str = "gemini-nano-banana-2.1"
     aspect_ratio: str
-    style_references: List[Path] = []
+    style_references: List[Path] = Field(default_factory=list)
 
     def __init__(
         self,
@@ -35,7 +36,7 @@ class GeminiImageGenerator(GeminiBase):
         self,
         prompt: str,
         output_path: Path,
-        style_references: List[Path] = [],
+        style_references: Optional[List[Path]] = None,
         sequence_reference: Optional[Path] = None
     ) -> None:
         """Generates an image with Gemini and saves it to disk."""
@@ -43,7 +44,8 @@ class GeminiImageGenerator(GeminiBase):
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        contents = self._prepare_contents(prompt, style_references, sequence_reference)
+        style_refs = style_references or []
+        contents = self._prepare_contents(prompt, style_refs, sequence_reference)
         config = types.GenerateContentConfig(
             response_modalities=['TEXT', 'IMAGE'],
             image_config=types.ImageConfig(aspect_ratio=self.aspect_ratio, image_size="1K")
@@ -62,7 +64,7 @@ class GeminiImageGenerator(GeminiBase):
         image = self._extract_image(response)
         image.save(output_path)
 
-        is_ref = style_references or sequence_reference
+        is_ref = style_refs or sequence_reference
         msg = f"Image generated ({'img2img' if is_ref else 'txt2img'}): {output_path}"
         Messenger.image(msg)
 
@@ -97,11 +99,13 @@ class GeminiImageGenerator(GeminiBase):
             contents.append("--- STYLE REFERENCES (Maintain this visual aesthetic) ---")
             for ref_path in style_references:
                 if ref_path.exists():
-                    contents.append(Image.open(ref_path))
+                    with Image.open(ref_path) as reference_image:
+                        contents.append(reference_image.copy())
 
         if sequence_reference and sequence_reference.exists():
             contents.append("--- SEQUENCE REFERENCE (Maintain consistency) ---")
-            contents.append(Image.open(sequence_reference))
+            with Image.open(sequence_reference) as reference_image:
+                contents.append(reference_image.copy())
 
         return contents
 
