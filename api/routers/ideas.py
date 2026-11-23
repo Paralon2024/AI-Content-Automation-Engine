@@ -174,14 +174,14 @@ async def upload_script(
     except Exception as exc:
         raise HTTPException(422, f"Invalid script.json: {exc}")
 
-    idea_dir = _out(orientation) / "ideas" / f"idea_{idea_id:06d}"
-    idea_dir.mkdir(parents=True, exist_ok=True)
-    (idea_dir / "script.json").write_bytes(content)
-
     st = _store(orientation)
     idea = st.get_by_id(idea_id)
     if not idea:
         raise HTTPException(404, "Idea not found")
+
+    idea_dir = _out(orientation) / "ideas" / f"idea_{idea_id:06d}"
+    idea_dir.mkdir(parents=True, exist_ok=True)
+    (idea_dir / "script.json").write_bytes(content)
 
     if title:
         idea.title = title
@@ -197,6 +197,11 @@ async def upload_videos(
     files: List[UploadFile] = File(...),
     orientation: VideoOrientation = VideoOrientation.SHORT,
 ) -> dict[str, Any]:
+    st = _store(orientation)
+    idea = st.get_by_id(idea_id)
+    if not idea:
+        raise HTTPException(404, "Idea not found")
+
     videos_dir = _out(orientation) / "ideas" / f"idea_{idea_id:06d}" / "videos"
     videos_dir.mkdir(parents=True, exist_ok=True)
 
@@ -204,11 +209,6 @@ async def upload_videos(
     for i, file in enumerate(sorted_files, start=1):
         content = await file.read()
         (videos_dir / f"scene_{i:04d}.mp4").write_bytes(content)
-
-    st = _store(orientation)
-    idea = st.get_by_id(idea_id)
-    if not idea:
-        raise HTTPException(404, "Idea not found")
 
     idea.state = State.VIDEOS_GENERATED
     st.save(idea)
@@ -280,9 +280,16 @@ def assemble_video(
     bg_volume: float = Form(...),
     music_path: str = Form(...),
 ) -> dict[str, str]:
-    full_music_path = _RESOURCE_BASE / "bg-music" / music_path
-    if not full_music_path.exists():
+    music_root = (_RESOURCE_BASE / "bg-music").resolve()
+    full_music_path = (music_root / music_path).resolve()
+    try:
+        full_music_path.relative_to(music_root)
+    except ValueError as exc:
+        raise HTTPException(400, "Invalid music path") from exc
+    if not full_music_path.is_file():
         raise HTTPException(404, f"Music file not found: {music_path}")
+    if not 0 <= bg_volume <= 1:
+        raise HTTPException(422, "Background volume must be between 0 and 1")
 
     job_id = job_manager.create_job()
     p = _pipeline(orientation)
