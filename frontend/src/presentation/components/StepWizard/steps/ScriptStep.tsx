@@ -14,7 +14,6 @@ interface Props {
   showForm: boolean
   scriptMode: 'generate' | 'upload'
   uploadingScript: boolean
-  onSetShowForm: (v: boolean) => void
   onSetScriptMode: (m: 'generate' | 'upload') => void
   onSubmit: (form: ScriptFormData) => void
   onUpload: (file: File) => void
@@ -23,7 +22,7 @@ interface Props {
 export default function ScriptStep({
   idea, base, level, jobStep,
   showForm, scriptMode, uploadingScript,
-  onSetShowForm, onSetScriptMode, onSubmit, onUpload,
+  onSetScriptMode, onSubmit, onUpload,
 }: Props) {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
