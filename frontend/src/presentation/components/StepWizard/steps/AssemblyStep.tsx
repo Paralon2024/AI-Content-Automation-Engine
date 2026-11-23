@@ -21,10 +21,10 @@ export default function AssemblyStep({ base, level, jobStep, onAssemble }: Props
     return (
       <>
         <ActionRow>
-          <BtnSecondary onClick={onAssemble}>↺ Re-ensamblar</BtnSecondary>
+          <BtnSecondary onClick={onAssemble}>↺ Reassemble</BtnSecondary>
         </ActionRow>
-        <VideoSequence baseUrl={base} synced sectionLabel="Escenas sincronizadas" />
-        <VideoPlayer src={`${base}/editions/raw_video.mp4`} label="Video ensamblado (sin subtítulos)" />
+        <VideoSequence baseUrl={base} synced sectionLabel="Synchronized scenes" />
+        <VideoPlayer src={`${base}/editions/raw_video.mp4`} label="Assembled video (no subtitles)" />
       </>
     )
   }
@@ -32,16 +32,16 @@ export default function AssemblyStep({ base, level, jobStep, onAssemble }: Props
   return (
     <>
       <ActionRow>
-        <BtnPrimary onClick={onAssemble}>Ensamblar Video</BtnPrimary>
+        <BtnPrimary onClick={onAssemble}>Assemble video</BtnPrimary>
       </ActionRow>
 
       <TwoCol>
         <div>
-          <ColLabel>Videos de escenas</ColLabel>
+          <ColLabel>Scene videos</ColLabel>
           <VideoSequence baseUrl={base} synced={false} sectionLabel="" />
         </div>
         <div>
-          <ColLabel>Audios de escenas</ColLabel>
+          <ColLabel>Scene audio</ColLabel>
           <AudioSequence baseUrl={base} hideLabel />
         </div>
       </TwoCol>
