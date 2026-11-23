@@ -10,7 +10,17 @@ services:
       # Persistent volume for the Whisper model (outside the /app bind mount)
       - whisper_model:/opt/whisper
     environment:
-      - PYTHONUNBUFFERED=1
+      PYTHONUNBUFFERED: "1"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5m
 
   frontend:
     build:
@@ -23,9 +33,10 @@ services:
       # Preserve the container's node_modules (do not overwrite them with host files)
       - /app/node_modules
     environment:
-      - VITE_BACKEND_HOST=http://backend:8000
+      VITE_BACKEND_HOST: "http://backend:8000"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   whisper_model:
