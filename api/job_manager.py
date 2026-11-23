@@ -54,7 +54,8 @@ def run_in_job(job_id: str, fn: object) -> None:
     try:
         fn()  # type: ignore[operator]
     except Exception as exc:
-        writer.write(f"❌ Error: {exc}\n")
+        writer.write(f"❌ Error: {type(exc).__name__}: {exc}\n")
+        _put(job_id, "__FAILED__")
     finally:
         writer.flush()
         sys.stdout = old_out
@@ -68,13 +69,18 @@ async def stream_job(job_id: str) -> AsyncGenerator[str, None]:
     q = _jobs[job_id]
     while True:
         try:
-            msg = await asyncio.wait_for(q.get(), timeout=300)
+            msg = await asyncio.wait_for(q.get(), timeout=15)
         except asyncio.TimeoutError:
-            yield "[TIMEOUT]"
-            _jobs.pop(job_id, None)
-            return
+            # Keep long-running generation jobs alive. A heartbeat is an SSE
+            # comment, so EventSource does not dispatch it as an application log.
+            yield ": keep-alive"
+            continue
         if msg == _DONE:
             yield "[DONE]"
+            _jobs.pop(job_id, None)
+            return
+        if msg == "__FAILED__":
+            yield "[FAILED]"
             _jobs.pop(job_id, None)
             return
         yield msg
