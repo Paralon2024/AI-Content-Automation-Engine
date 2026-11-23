@@ -7,6 +7,7 @@ from typing import AsyncGenerator, Dict
 _jobs: Dict[str, asyncio.Queue[str]] = {}
 _job_states: OrderedDict[str, str] = OrderedDict()
 _MAX_RETAINED_JOB_STATES = 500
+_MAX_QUEUED_LOG_LINES = 1000
 _loop: asyncio.AbstractEventLoop | None = None
 
 _DONE = "__DONE__"
@@ -19,14 +20,32 @@ def register_loop(loop: asyncio.AbstractEventLoop) -> None:
 
 def create_job() -> str:
     job_id = str(uuid.uuid4())
-    _jobs[job_id] = asyncio.Queue()
+    _jobs[job_id] = asyncio.Queue(maxsize=_MAX_QUEUED_LOG_LINES)
     _job_states[job_id] = "running"
     return job_id
 
 
 def _put(job_id: str, msg: str) -> None:
-    if _loop and job_id in _jobs:
-        asyncio.run_coroutine_threadsafe(_jobs[job_id].put(msg), _loop)
+    if not _loop:
+        return
+
+    def enqueue() -> None:
+        q = _jobs.get(job_id)
+        if q is None:
+            return
+        # A disconnected client must not allow unbounded memory growth.
+        # Preserve the newest output and terminal marker when the queue is full.
+        if q.full():
+            try:
+                q.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+        try:
+            q.put_nowait(msg)
+        except asyncio.QueueFull:
+            pass
+
+    _loop.call_soon_threadsafe(enqueue)
 
 
 class JobWriter:
