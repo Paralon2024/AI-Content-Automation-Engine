@@ -69,22 +69,29 @@ class GeminiVideoGenerator(GeminiBase):
             )
 
         input_items.append({"type": "text", "text": prompt})
-        task = "image_to_video" if img_start_path else "text_to_video"
+        response_format = {
+            "type": "video",
+            "duration": self.duration,
+            "resolution": self.resolution,
+            "aspect_ratio": self.aspect_ratio,
+        }
+        if img_end_path and self.duration.endswith("s"):
+            seconds = int(self.duration[:-1])
+            if seconds > 10:
+                raise ValueError("First/last-frame interpolation supports durations up to 10 seconds")
 
         payload = {
             "model": self.video_model,
             "store": False,
             "input": input_items,
-            "response_format": {
-                "type": "video",
-                "duration": self.duration,
-                "resolution": self.resolution,
-                "aspect_ratio": self.aspect_ratio,
-            },
-            "generation_config": {
-                "video_config": {"task": task},
-            },
+            "response_format": response_format,
         }
+        # Let Omni infer first/last-frame interpolation from the two ordered images.
+        # Use the task hint only for single-image generation, as documented by Google.
+        if img_start_path and not img_end_path:
+            payload["generation_config"] = {
+                "video_config": {"task": "image_to_video"},
+            }
 
         request = urllib.request.Request(
             self.api_url,
