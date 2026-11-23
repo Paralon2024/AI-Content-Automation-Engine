@@ -49,11 +49,11 @@ class GeminiAudioGenerator(GeminiBase):
                     pcm_chunks.append(part.inline_data.data)
 
         if not pcm_chunks:
-            raise RuntimeError("❌ No se encontró audio en la respuesta de Gemini")
+            raise RuntimeError("❌ No audio found in the Gemini response")
 
         combined_pcm = b"".join(pcm_chunks)
         self._write_wav(audio_path, combined_pcm)
-        Messenger.audio(f"Audio generado: {audio_path}")
+        Messenger.audio(f"Audio generated: {audio_path}")
 
     def _write_wav(
         self,
