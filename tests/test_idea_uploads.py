@@ -78,6 +78,29 @@ class UploadEndpointTests(unittest.TestCase):
             valid_script(),
         )
 
+    def test_script_staging_failure_preserves_existing_script(self):
+        existing = b'{"scenes":[]}'
+        script_path = self.idea_dir / "script.json"
+        script_path.write_bytes(existing)
+        original_write_bytes = Path.write_bytes
+
+        def fail_staging_write(path, data):
+            if ".script-" in path.name and path.name.endswith(".tmp"):
+                raise OSError("simulated staging disk failure")
+            return original_write_bytes(path, data)
+
+        with patch.object(Path, "write_bytes", fail_staging_write):
+            with self.assertRaisesRegex(OSError, "simulated staging disk failure"):
+                asyncio.run(
+                    ideas_router.upload_script(
+                        1, upload("script.json", valid_script()),
+                        orientation=self.orientation,
+                    )
+                )
+
+        self.assertEqual(script_path.read_bytes(), existing)
+        self.assertEqual(self.store.get_by_id(1).state, State.NEW)
+
     def test_invalid_script_upload_does_not_change_existing_script_or_state(self):
         existing = b'{"scenes":[]}'
         (self.idea_dir / "script.json").write_bytes(existing)
