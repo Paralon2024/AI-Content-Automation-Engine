@@ -2,6 +2,16 @@ import { Idea, MusicNode, ScriptFormData } from './types'
 
 const BASE = '/api'
 
+async function get<T>(url: string): Promise<T> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`GET ${url} failed: ${res.status}`)
+  return res.json() as Promise<T>
+}
+
+function encodePath(path: string): string {
+  return path.split('/').map(encodeURIComponent).join('/')
+}
+
 async function post<T>(url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
     method: 'POST',
@@ -19,7 +29,7 @@ async function postJob(url: string, body?: unknown): Promise<string> {
 
 export const api = {
   ideas: {
-    list: (): Promise<Idea[]> => fetch(`${BASE}/ideas`).then(r => r.json()),
+    list: (): Promise<Idea[]> => get(`${BASE}/ideas`),
     generate: (): Promise<Idea> => post(`${BASE}/ideas/generate`),
   },
 
@@ -49,7 +59,7 @@ export const api = {
   },
 
   music: {
-    list: (): Promise<MusicNode[]> => fetch(`${BASE}/music`).then(r => r.json()),
+    list: (): Promise<MusicNode[]> => get(`${BASE}/music`),
     upload: async (files: File[], folder = ''): Promise<void> => {
       const form = new FormData()
       files.forEach(f => form.append('files', f))
@@ -65,15 +75,15 @@ export const api = {
       if (!res.ok) throw new Error('Create folder failed')
     },
     delete: async (path: string): Promise<void> => {
-      const res = await fetch(`${BASE}/music/${path}`, { method: 'DELETE' })
+      const res = await fetch(`${BASE}/music/${encodePath(path)}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('Delete failed')
     },
-    streamUrl: (path: string) => `${BASE}/music/${path}/stream`,
+    streamUrl: (path: string) => `${BASE}/music/${encodePath(path)}/stream`,
   },
 
   geminiKey: {
     check: (): Promise<{ configured: boolean; source: string | null }> =>
-      fetch(`${BASE}/config/gemini-key`).then(r => r.json()),
+      get(`${BASE}/config/gemini-key`),
     save: (key: string): Promise<{ ok: boolean }> =>
       post(`${BASE}/config/gemini-key`, { key }),
   },
