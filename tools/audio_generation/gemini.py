@@ -11,7 +11,7 @@ from tools.common.messenger import Messenger
 
 class GeminiAudioGenerator(GeminiBase):
     tts_model: str = "gemini-3.8-flash-tts"
-    voice_name: str = "Fenrir"
+    voice_name: str = "Kore"
     api_url: str = "https://generativelanguage.googleapis.com/v1beta/interactions"
 
     def text_to_speech(
@@ -52,7 +52,7 @@ class GeminiAudioGenerator(GeminiBase):
                     ],
                 }
             ],
-            "response_format": {"type": "audio"},
+            "response_format": {"type": "audio", "mime_type": "audio/wav"},
             "generation_config": {
                 "speech_config": [{"voice": self.voice_name}],
             },
@@ -79,12 +79,23 @@ class GeminiAudioGenerator(GeminiBase):
         except urllib.error.URLError as exc:
             raise RuntimeError(f"Could not connect to the Gemini TTS API: {exc}") from exc
 
-        audio_result = result.get("output_audio") or {}
-        encoded_audio = audio_result.get("data")
-        if not encoded_audio:
+        audio_result = None
+        for step in result.get("steps", []):
+            if step.get("type") != "model_output":
+                continue
+            for item in step.get("content", []):
+                if item.get("type") == "audio" and item.get("data"):
+                    audio_result = item
+                    break
+            if audio_result:
+                break
+
+        if audio_result is None:
             raise RuntimeError(
                 f"Gemini TTS returned no audio data. Response status: {result.get('status')}"
             )
+
+        encoded_audio = audio_result["data"]
 
         try:
             wav_data = base64.b64decode(encoded_audio, validate=True)
@@ -94,7 +105,8 @@ class GeminiAudioGenerator(GeminiBase):
         if not wav_data.startswith(b"RIFF") or wav_data[8:12] != b"WAVE":
             mime_type = audio_result.get("mime_type", "unknown")
             raise RuntimeError(
-                f"Gemini TTS returned an unexpected audio format: {mime_type}"
+                f"Gemini TTS returned an unexpected audio format: {mime_type}. "
+                "Expected audio/wav; verify the response_format configuration."
             )
 
         audio_path.write_bytes(wav_data)
