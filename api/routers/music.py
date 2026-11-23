@@ -49,15 +49,28 @@ async def upload_tracks(
     dest_dir = _safe_path(folder) if folder else _LIBRARY.resolve()
     dest_dir.mkdir(parents=True, exist_ok=True)
     uploaded: list[str] = []
+    names: list[str] = []
     for file in files:
-        name = Path(file.filename or "track.mp3").name
+        name = Path((file.filename or "track.mp3").replace("\\", "/")).name
         if Path(name).suffix.lower() not in _AUDIO_EXTENSIONS:
             raise HTTPException(415, f"Unsupported audio format: {name}")
-        content = await file.read()
-        if len(content) > 100 * 1024 * 1024:
-            raise HTTPException(413, f"Audio file is too large: {name}")
+        names.append(name)
+
+    for file, name in zip(files, names):
         dest = dest_dir / name
-        dest.write_bytes(content)
+        temporary = dest.with_name(dest.name + ".uploading")
+        total_size = 0
+        try:
+            with temporary.open("wb") as destination:
+                while chunk := await file.read(1024 * 1024):
+                    total_size += len(chunk)
+                    if total_size > 100 * 1024 * 1024:
+                        raise HTTPException(413, f"Audio file is too large: {name}")
+                    destination.write(chunk)
+            temporary.replace(dest)
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            raise
         uploaded.append(str(dest.relative_to(_LIBRARY)))
     return {"uploaded": uploaded}
 
