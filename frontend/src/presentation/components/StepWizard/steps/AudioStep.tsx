@@ -59,7 +59,7 @@ export default function AudioStep({ base, level, jobStep, onGenerate }: Props) {
 
       <Header>
         <ColLabel>Script — {scenes.length} scenes</ColLabel>
-        <ColLabel>{generated ? `Voz en off — ${audioFiles.length} pistas` : 'Voz en off — pendiente'}</ColLabel>
+        <ColLabel>{generated ? `Voiceover — ${audioFiles.length} pistas` : 'Voiceover — pending'}</ColLabel>
       </Header>
 
       <SceneList>
