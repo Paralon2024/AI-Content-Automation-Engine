@@ -44,15 +44,14 @@ class UploadEndpointTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.root = Path(self.temp_dir.name)
-        self.idea_dir = self.root / "ideas" / "idea_000001"
+        self.out_root = self.root / "out"
+        self.idea_dir = self.out_root / "ideas" / "idea_000001"
         self.idea_dir.mkdir(parents=True)
-        self.store = FolderStore(self.root / "ideas", IdeaRaw)
+        self.store = FolderStore(self.root / "store" / "ideas", IdeaRaw)
         self.idea = self.store.add(
             IdeaRaw(id=1, title="Original title", category="test", state=State.NEW)
         )
         self.orientation = VideoOrientation.SHORT
-        self.out_root = self.root / "out"
-        self.out_root.mkdir()
         self.patches = [
             patch.object(ideas_router, "_out", return_value=self.out_root),
             patch.object(ideas_router, "_store", return_value=self.store),
@@ -102,7 +101,7 @@ class UploadEndpointTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as raised:
             asyncio.run(
                 ideas_router.upload_videos(
-                    1, [upload("scene.mp4", b"\\x00\\x00\\x00\\x18ftypisom")],
+                    1, [upload("scene.mp4", bytes.fromhex("000000186674797069736f6d"))],
                     orientation=self.orientation,
                 )
             )
@@ -117,9 +116,11 @@ class UploadEndpointTests(unittest.TestCase):
         existing.write_bytes(b"old-scene")
         original_state = self.idea.state
 
+        idea = self.idea
+
         class FailingStore:
             def get_by_id(self, idea_id):
-                return self.idea
+                return idea
 
             def save(self, idea):
                 raise OSError("simulated metadata persistence failure")
@@ -129,7 +130,7 @@ class UploadEndpointTests(unittest.TestCase):
                 asyncio.run(
                     ideas_router.upload_videos(
                         1,
-                        [upload("scene.mp4", b"\\x00\\x00\\x00\\x18ftypisom-new")],
+                        [upload("scene.mp4", bytes.fromhex("000000186674797069736f6d") + b"-new")],
                         orientation=self.orientation,
                     )
                 )
