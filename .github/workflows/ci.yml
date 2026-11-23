@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - english-translation-api-audit
+      - fix/qa-critical-repairs
   pull_request:
     branches:
       - main
@@ -60,3 +61,21 @@ jobs:
 
       - name: Type-check and build
         run: npm run build
+
+  docker-build:
+    name: Backend Docker image build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.backend
+          push: false
+          tags: ai-content-automation-engine/backend:ci
