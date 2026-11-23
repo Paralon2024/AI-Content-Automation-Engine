@@ -53,7 +53,7 @@ class Scene(BaseModel):
     scene_number: int = Field(description="Sequential number of the scene (Integer)")
     image_prompt: ImagePrompt = Field(description="Structured details for image generation")
     video_prompt: VideoPrompt = Field(description="Structured details for video generation")
-    narration: str = Field(description="Spoken narration for this scene in SPANISH (LATAM)")
+    narration: str = Field(description="Spoken narration for this scene in ENGLISH")
 
 
 class VideoScript(BaseModel):
@@ -95,7 +95,7 @@ class VideoScript(BaseModel):
         json_format = json.dumps(sample_dict, indent=2, ensure_ascii=False)
 
         schema_block = (
-            "\n**Formato de Salida Obligatorio (JSON):**\n"
+            "\n**Required Output Format (JSON):**\n"
             "```json\n"
             f"{json_format}\n"
             "```\n"
