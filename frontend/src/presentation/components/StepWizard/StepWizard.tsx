@@ -139,6 +139,12 @@ export default function StepWizard({ idea, onUpdate }: Props) {
           )}
         </StepDetailHeader>
 
+        {w.jobError && (
+          <div role="alert" style={{ color: '#d94848', margin: '12px 0', whiteSpace: 'pre-wrap' }}>
+            {w.jobError}
+          </div>
+        )}
+
         {renderStep()}
       </StepDetail>
     </Wizard>
