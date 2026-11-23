@@ -56,14 +56,14 @@ class GeminiImageGenerator(GeminiBase):
         )
 
         if not response or not response.parts:
-            raise RuntimeError("❌ Gemini Image no devolvió partes")
+            raise RuntimeError("❌ Gemini Image returned no response parts")
 
         self._extract_usage(response, self.image_model)
         image = self._extract_image(response)
         image.save(output_path)
 
         is_ref = style_references or sequence_reference
-        msg = f"Imagen generada ({'img2img' if is_ref else 'txt2img'}): {output_path}"
+        msg = f"Image generated ({'img2img' if is_ref else 'txt2img'}): {output_path}"
         Messenger.image(msg)
 
     def generate_images(self, tasks: List[ImageTask]) -> None:
@@ -116,5 +116,5 @@ class GeminiImageGenerator(GeminiBase):
                 break
 
         if image is None:
-            raise RuntimeError("❌ No se encontró imagen en la respuesta de Gemini")
+            raise RuntimeError("❌ No image found in the Gemini response")
         return image
