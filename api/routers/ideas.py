@@ -189,12 +189,36 @@ async def upload_script(
 
     idea_dir = _out(orientation) / "ideas" / f"idea_{idea_id:06d}"
     idea_dir.mkdir(parents=True, exist_ok=True)
-    (idea_dir / "script.json").write_bytes(content)
+    script_path = idea_dir / "script.json"
+    transaction_id = uuid.uuid4().hex
+    staged_script = idea_dir / f".script-{transaction_id}.tmp"
+    backup_script = idea_dir / f".script-{transaction_id}.bak"
+    old_title = idea.title
+    old_state = idea.state
 
-    if title:
-        idea.title = title
-    idea.state = State.SCRIPT_GENERATED
-    st.save(idea)
+    # Stage the new script and preserve the previous one until metadata is saved.
+    staged_script.write_bytes(content)
+    try:
+        if script_path.exists():
+            script_path.replace(backup_script)
+        staged_script.replace(script_path)
+
+        if title:
+            idea.title = title
+        idea.state = State.SCRIPT_GENERATED
+        st.save(idea)
+    except Exception:
+        idea.title = old_title
+        idea.state = old_state
+        script_path.unlink(missing_ok=True)
+        if backup_script.exists():
+            # If restoration fails, leave the backup in place for manual recovery.
+            backup_script.replace(script_path)
+        raise
+    finally:
+        staged_script.unlink(missing_ok=True)
+
+    backup_script.unlink(missing_ok=True)
     return idea.model_dump()
 
 
