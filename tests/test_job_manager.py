@@ -16,7 +16,8 @@ class JobManagerTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.to_thread(job_manager.run_in_job, job_id, lambda: None)
 
         self.assertEqual(await self._collect(job_id), ["[DONE]"])
-        # A reconnect after the first terminal event still sees the final state.
+        self.assertNotIn(job_id, job_manager._jobs)
+        # A reconnect after the queue is cleaned still sees the final state.
         self.assertEqual(await self._collect(job_id), ["[DONE]"])
 
     async def test_failed_job_is_not_reported_as_success(self) -> None:
@@ -31,6 +32,7 @@ class JobManagerTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any("expected test failure" in message for message in messages))
         self.assertEqual(messages[-1], "[FAILED]")
         self.assertNotIn("[DONE]", messages)
+        self.assertNotIn(job_id, job_manager._jobs)
         self.assertEqual(await self._collect(job_id), ["[FAILED]"])
 
 
