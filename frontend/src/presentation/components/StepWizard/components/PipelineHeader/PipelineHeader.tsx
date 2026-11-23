@@ -29,7 +29,7 @@ export default function PipelineHeader({ steps, selected, getStatus, onSelect }:
                 $selected={i === selected}
                 onClick={() => !locked && onSelect(i)}
                 disabled={locked}
-                aria-label={`Paso ${step.num}: ${step.title}`}
+                aria-label={`Step ${step.num}: ${step.title}`}
               >
                 {status === 'done' ? '✓' : step.num}
               </Circle>
