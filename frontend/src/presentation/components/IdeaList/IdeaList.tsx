@@ -40,7 +40,7 @@ export default function IdeaList({ ideas, selectedId, isOpen, onToggle, onSelect
   if (!isOpen) {
     return (
       <IdeaListRoot>
-        <CollapsedStrip onClick={onToggle} title="Expandir panel de ideas">
+        <CollapsedStrip onClick={onToggle} title="Expand ideas panel">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <rect x="2" y="6" width="14" height="12" rx="2" />
             <path d="M16 10l5-3v10l-5-3V10z" />
@@ -57,7 +57,7 @@ export default function IdeaList({ ideas, selectedId, isOpen, onToggle, onSelect
   return (
     <IdeaListRoot>
       <ListHeader>
-        <CollapseBtn onClick={onToggle} title="Colapsar panel">
+        <CollapseBtn onClick={onToggle} title="Collapse panel">
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
             <rect x="1.5" y="1.5" width="4" height="15" rx="1.5" fill="currentColor" opacity="0.5" />
             <rect x="7" y="1.5" width="9.5" height="15" rx="1.5" fill="currentColor" opacity="0.18" />
