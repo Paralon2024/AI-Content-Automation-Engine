@@ -1,16 +1,18 @@
-import time
-import wave
+import base64
+import json
+import os
+import urllib.error
+import urllib.request
 from pathlib import Path
-
-from google.genai import types
 
 from tools.common.gemini_base import GeminiBase
 from tools.common.messenger import Messenger
 
 
 class GeminiAudioGenerator(GeminiBase):
-    tts_model: str = "gemini-3.1-flash-tts-preview"
+    tts_model: str = "gemini-3.8-flash-tts"
     voice_name: str = "Fenrir"
+    api_url: str = "https://generativelanguage.googleapis.com/v1beta/interactions"
 
     def text_to_speech(
         self,
@@ -18,57 +20,93 @@ class GeminiAudioGenerator(GeminiBase):
         audio_path: Path,
     ) -> None:
         """
-        Generates audio using Gemini TTS and saves it to disk.
+        Generate narration with the Gemini Interactions API and save the WAV output.
         """
-        time.sleep(20)
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise RuntimeError("GEMINI_API_KEY is not configured")
 
         audio_path.parent.mkdir(parents=True, exist_ok=True)
 
-        response = self.client.models.generate_content(
-            model=self.tts_model,
-            contents=text,
-            config=types.GenerateContentConfig(
-                response_modalities=["AUDIO"],
-                speech_config=types.SpeechConfig(
-                    voice_config=types.VoiceConfig(
-                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                            voice_name=self.voice_name,
-                        )
-                    )
-                ),
-            ),
+        payload = {
+            "model": self.tts_model,
+            "store": False,
+            "input": [
+                {
+                    "type": "user_input",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": text,
+                            "annotations": [
+                                {
+                                    "type": "speech_metadata",
+                                    "style": (
+                                        "Expressive, clear cinematic English narration. "
+                                        "Use natural pacing and emotional emphasis. "
+                                        "Read the supplied transcript verbatim."
+                                    ),
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+            "response_format": {"type": "audio"},
+            "generation_config": {
+                "speech_config": [{"voice": self.voice_name}],
+            },
+        }
+
+        request = urllib.request.Request(
+            self.api_url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": api_key,
+            },
+            method="POST",
         )
-        self._extract_usage(response, self.tts_model)
 
-        pcm_chunks: list[bytes] = []
-        if response.parts:
-            for part in response.parts:
-                if part.text:
-                    Messenger.info(f"Gemini thoughts: {part.text}")
-                elif part.inline_data and part.inline_data.data:
-                    pcm_chunks.append(part.inline_data.data)
+        try:
+            with urllib.request.urlopen(request, timeout=600) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            details = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"Gemini TTS request failed (HTTP {exc.code}): {details}"
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Could not connect to the Gemini TTS API: {exc}") from exc
 
-        if not pcm_chunks:
-            raise RuntimeError("❌ No audio found in the Gemini response")
+        audio_result = result.get("output_audio") or {}
+        encoded_audio = audio_result.get("data")
+        if not encoded_audio:
+            raise RuntimeError(
+                f"Gemini TTS returned no audio data. Response status: {result.get('status')}"
+            )
 
-        combined_pcm = b"".join(pcm_chunks)
-        self._write_wav(audio_path, combined_pcm)
+        try:
+            wav_data = base64.b64decode(encoded_audio, validate=True)
+        except (ValueError, TypeError) as exc:
+            raise RuntimeError("Gemini TTS returned invalid base64 audio data") from exc
+
+        if not wav_data.startswith(b"RIFF") or wav_data[8:12] != b"WAVE":
+            mime_type = audio_result.get("mime_type", "unknown")
+            raise RuntimeError(
+                f"Gemini TTS returned an unexpected audio format: {mime_type}"
+            )
+
+        audio_path.write_bytes(wav_data)
+
+        usage = result.get("usage") or {}
+        if usage:
+            Messenger.usage(
+                model=self.tts_model,
+                prompt=usage.get("total_input_tokens", 0),
+                thoughts=usage.get("total_thought_tokens", 0),
+                output=usage.get("total_output_tokens", 0),
+                total=usage.get("total_tokens", 0),
+            )
+
         Messenger.audio(f"Audio generated: {audio_path}")
-
-    def _write_wav(
-        self,
-        filename: Path,
-        pcm_data: bytes,
-        *,
-        sample_rate: int = 24000,
-        channels: int = 1,
-        sample_width: int = 2,
-    ) -> None:
-        """
-        Writes raw PCM data to a WAV file.
-        """
-        with wave.open(str(filename), "wb") as wav_file:
-            wav_file.setnchannels(channels)
-            wav_file.setsampwidth(sample_width)
-            wav_file.setframerate(sample_rate)
-            wav_file.writeframes(pcm_data)
