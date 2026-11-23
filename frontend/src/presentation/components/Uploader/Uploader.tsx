@@ -55,10 +55,14 @@ export default function Uploader({
     const sorted = [...files].sort((a, b) => a.name.localeCompare(b.name))
     const form = new FormData()
     sorted.forEach(f => form.append('files', f))
-    await fetch(`/api/ideas/${ideaId}/${endpoint}`, { method: 'POST', body: form })
-    setFiles([])
-    setUploading(false)
-    onUploaded()
+    try {
+      const response = await fetch(`/api/ideas/${ideaId}/${endpoint}`, { method: 'POST', body: form })
+      if (!response.ok) throw new Error(`Upload failed: ${response.status}`)
+      setFiles([])
+      onUploaded()
+    } finally {
+      setUploading(false)
+    }
   }
 
   const sorted = [...files].sort((a, b) => a.name.localeCompare(b.name))
