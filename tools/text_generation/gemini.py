@@ -17,13 +17,14 @@ class GeminiTextGenerator(GeminiBase):
         """
         Generates content with Gemini and parses it into a Pydantic model.
         """
-        response = self.client.models.generate_content(
+        response = self._execute_with_retry(
+            self.client.models.generate_content,
             model=self.text_model,
             contents=prompt,
             config={
-                'response_mime_type': 'application/json',
-                'response_schema': schema,
-            }
+                "response_mime_type": "application/json",
+                "response_schema": schema,
+            },
         )
         self._extract_usage(response, self.text_model)
 
