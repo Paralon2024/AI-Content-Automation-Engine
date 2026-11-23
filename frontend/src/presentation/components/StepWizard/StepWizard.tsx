@@ -42,7 +42,7 @@ export default function StepWizard({ idea, onUpdate }: Props) {
           idea={idea} base={base} level={w.level}
           jobStep={w.scriptStep}
           showForm={w.showForm} scriptMode={w.scriptMode} uploadingScript={w.uploadingScript}
-          onSetShowForm={w.setShowForm} onSetScriptMode={w.setScriptMode}
+          onSetScriptMode={w.setScriptMode}
           onSubmit={w.handleScript} onUpload={w.handleScriptUpload}
         />
       )
