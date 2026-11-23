@@ -181,7 +181,7 @@ export default function MusicLibrary({ selected, onSelect, volume = 1 }: Props) 
         <HeaderTitle>🎵 Music Library</HeaderTitle>
         {totalTracks > 0 && <TrackCount>{totalTracks} {totalTracks === 1 ? 'track' : 'tracks'}</TrackCount>}
         <UploadBtn onClick={() => uploadRef.current?.click()} disabled={uploading}>
-          {uploading ? '⏳ Uploading…' : '↑ Subir tracks'}
+          {uploading ? '⏳ Uploading…' : '↑ Upload tracks'}
         </UploadBtn>
         <input
           ref={uploadRef}
