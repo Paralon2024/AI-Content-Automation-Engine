@@ -1,4 +1,6 @@
 import concurrent.futures
+import shutil
+import uuid
 from pathlib import Path
 from typing import Any, AsyncGenerator, List
 
@@ -234,8 +236,6 @@ async def upload_videos(
 
     # Stage and validate every upload before touching the currently usable scenes.
     # The backup/rollback phase keeps the old set intact if any replacement fails.
-    import uuid
-
     transaction_id = uuid.uuid4().hex
     staging_dir = videos_dir / f".upload-{transaction_id}"
     backup_dir = videos_dir / f".backup-{transaction_id}"
@@ -281,11 +281,14 @@ async def upload_videos(
         for backup, original in reversed(backed_up_targets):
             if backup.exists():
                 backup.replace(original)
-        raise
-    finally:
-        import shutil
-        shutil.rmtree(staging_dir, ignore_errors=True)
+        # Remove backups only after every original file has been restored.
         shutil.rmtree(backup_dir, ignore_errors=True)
+        raise
+    else:
+        # The new set and state are committed; old scene files are no longer needed.
+        shutil.rmtree(backup_dir, ignore_errors=True)
+    finally:
+        shutil.rmtree(staging_dir, ignore_errors=True)
 
     return {"id": idea.id, "state": idea.state, "files_uploaded": len(sorted_files)}
 
