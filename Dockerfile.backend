@@ -1,4 +1,4 @@
-# ── Stage 1: compilar whisper.cpp ─────────────────────────────────────────────
+# ── Stage 1: Build whisper.cpp ─────────────────────────────────────────────────
 FROM debian:bookworm-slim AS whisper-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -10,19 +10,17 @@ RUN git clone --depth 1 https://github.com/ggerganov/whisper.cpp /tmp/whisper &&
           -DCMAKE_BUILD_TYPE=Release \
           -DGGML_NATIVE=OFF \
           -DBUILD_SHARED_LIBS=OFF \
-          -DCMAKE_C_FLAGS="-march=armv8-a" \
-          -DCMAKE_CXX_FLAGS="-march=armv8-a" && \
     cmake --build /tmp/whisper/build --config Release -j$(nproc)
 
-# ── Stage 2: runtime ──────────────────────────────────────────────────────────
+# ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 FROM python:3.12-slim
 
-# Dependencias de sistema
+# System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Binario de whisper desde el stage anterior
+# Copy the Whisper binary from the build stage
 COPY --from=whisper-builder /tmp/whisper/build/bin/whisper-cli /usr/local/bin/whisper-cli
 
 ENV WHISPER_MODEL_PATH=/opt/whisper/ggml-small.bin
@@ -37,11 +35,11 @@ RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
 
 WORKDIR /app
 
-# Instalar dependencias primero (mejor cache de Docker)
+# Install dependencies first to improve Docker layer caching
 COPY pyproject.toml poetry.lock* ./
 RUN poetry install --no-root --only main
 
-# Entrypoint: descarga modelo whisper si no existe, luego arranca servidor
+# Entrypoint: download the Whisper model if missing, then start the API server
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
