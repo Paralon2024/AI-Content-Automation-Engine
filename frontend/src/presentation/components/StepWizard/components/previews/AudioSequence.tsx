@@ -15,7 +15,7 @@ export default function AudioSequence({ baseUrl, hideLabel }: { baseUrl: string;
 
   return (
     <Wrap>
-      {!hideLabel && <SectionLabel>Audio — {files.length} escenas</SectionLabel>}
+      {!hideLabel && <SectionLabel>Audio — {files.length} scenes</SectionLabel>}
       <List>
         {files.map((name, i) => (
           <Row key={name}>

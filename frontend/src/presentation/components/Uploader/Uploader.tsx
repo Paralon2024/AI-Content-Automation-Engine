@@ -55,10 +55,14 @@ export default function Uploader({
     const sorted = [...files].sort((a, b) => a.name.localeCompare(b.name))
     const form = new FormData()
     sorted.forEach(f => form.append('files', f))
-    await fetch(`/api/ideas/${ideaId}/${endpoint}`, { method: 'POST', body: form })
-    setFiles([])
-    setUploading(false)
-    onUploaded()
+    try {
+      const response = await fetch(`/api/ideas/${ideaId}/${endpoint}`, { method: 'POST', body: form })
+      if (!response.ok) throw new Error(`Upload failed: ${response.status}`)
+      setFiles([])
+      onUploaded()
+    } finally {
+      setUploading(false)
+    }
   }
 
   const sorted = [...files].sort((a, b) => a.name.localeCompare(b.name))
@@ -85,27 +89,27 @@ export default function Uploader({
         {files.length === 0 ? (
           <DropHint>
             <DropIcon>🎬</DropIcon>
-            <DropLabel>{label ?? 'Arrastra los archivos o haz clic para seleccionar'}</DropLabel>
-            <DropSmall>{hint ?? `Archivos ${accept} — se ordenan por nombre`}</DropSmall>
+            <DropLabel>{label ?? 'Drag and drop files here or click to select'}</DropLabel>
+            <DropSmall>{hint ?? `Archivos ${accept} — sorted by filename`}</DropSmall>
           </DropHint>
         ) : (
           <FileList onClick={e => e.stopPropagation()}>
             {sorted.map((f, i) => (
               <FileItem key={f.name}>
-                <SceneNum>Escena {i + 1}</SceneNum>
+                <SceneNum>Scene {i + 1}</SceneNum>
                 <FileName>{f.name}</FileName>
                 <FileSize>{(f.size / 1e6).toFixed(1)} MB</FileSize>
                 <RemoveBtn onClick={() => removeFile(f.name)}>×</RemoveBtn>
               </FileItem>
             ))}
-            <AddMoreBtn onClick={() => inputRef.current?.click()}>+ Agregar más</AddMoreBtn>
+            <AddMoreBtn onClick={() => inputRef.current?.click()}>+ Add more</AddMoreBtn>
           </FileList>
         )}
       </DropZone>
 
       {files.length > 0 && (
         <UploadBtn onClick={handleUpload} disabled={uploading}>
-          {uploading ? 'Subiendo...' : `Subir ${files.length} archivo${files.length !== 1 ? 's' : ''}`}
+          {uploading ? 'Uploading...' : `Upload ${files.length} file${files.length !== 1 ? 's' : ''}`}
         </UploadBtn>
       )}
     </UploaderRoot>

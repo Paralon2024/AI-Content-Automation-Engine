@@ -132,7 +132,7 @@ export default function ScriptViewer({ url }: { url: string }) {
 
   return (
     <Wrap>
-      <Label>Script — {script.scenes.length} escenas</Label>
+      <Label>Script — {script.scenes.length} scenes</Label>
       <SceneList>
         {script.scenes.map(s => (
           <Card key={s.scene_number}>
@@ -143,24 +143,24 @@ export default function ScriptViewer({ url }: { url: string }) {
             <Divider />
             <CardBottom>
               <Section $right>
-                <SectionTitle>Prompt imagen</SectionTitle>
+                <SectionTitle>Image prompt</SectionTitle>
                 {s.image_prompt.subjects.map((sub, i) => (
                   <Row key={i}>
-                    <Key>Sujeto {i + 1}</Key>
+                    <Key>Subject {i + 1}</Key>
                     <Val>{sub.description} — {sub.action}</Val>
                   </Row>
                 ))}
-                <Row><Key>Entorno</Key><Val>{s.image_prompt.environment}</Val></Row>
-                <Row><Key>Iluminación</Key><Val>{s.image_prompt.lighting}</Val></Row>
-                <Row><Key>Composición</Key><Val>{s.image_prompt.composition}</Val></Row>
-                <Row><Key>Estilo</Key><Val>{s.image_prompt.style}</Val></Row>
+                <Row><Key>Environment</Key><Val>{s.image_prompt.environment}</Val></Row>
+                <Row><Key>Lighting</Key><Val>{s.image_prompt.lighting}</Val></Row>
+                <Row><Key>Composition</Key><Val>{s.image_prompt.composition}</Val></Row>
+                <Row><Key>Style</Key><Val>{s.image_prompt.style}</Val></Row>
               </Section>
               <Section>
-                <SectionTitle>Prompt video</SectionTitle>
+                <SectionTitle>Video prompt</SectionTitle>
                 <Row><Key>Movimiento</Key><Val>{s.video_prompt.motion}</Val></Row>
-                <Row><Key>Cámara</Key><Val>{s.video_prompt.camera_movement}</Val></Row>
-                <Row><Key>Transición</Key><Val>{s.video_prompt.transition}</Val></Row>
-                <Row><Key>Duración</Key><Val>{s.video_prompt.duration_hint}</Val></Row>
+                <Row><Key>Camera</Key><Val>{s.video_prompt.camera_movement}</Val></Row>
+                <Row><Key>Transition</Key><Val>{s.video_prompt.transition}</Val></Row>
+                <Row><Key>Duration</Key><Val>{s.video_prompt.duration_hint}</Val></Row>
               </Section>
             </CardBottom>
           </Card>

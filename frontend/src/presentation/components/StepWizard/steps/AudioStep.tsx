@@ -52,14 +52,14 @@ export default function AudioStep({ base, level, jobStep, onGenerate }: Props) {
     <>
       <ActionRow>
         {generated
-          ? <BtnSecondary onClick={onGenerate}>↺ Regenerar Audio</BtnSecondary>
-          : <BtnPrimary   onClick={onGenerate}>Generar Audio</BtnPrimary>
+          ? <BtnSecondary onClick={onGenerate}>↺ Regenerate audio</BtnSecondary>
+          : <BtnPrimary   onClick={onGenerate}>Generate audio</BtnPrimary>
         }
       </ActionRow>
 
       <Header>
-        <ColLabel>Guion — {scenes.length} escenas</ColLabel>
-        <ColLabel>{generated ? `Voz en off — ${audioFiles.length} pistas` : 'Voz en off — pendiente'}</ColLabel>
+        <ColLabel>Script — {scenes.length} scenes</ColLabel>
+        <ColLabel>{generated ? `Voiceover — ${audioFiles.length} pistas` : 'Voiceover — pending'}</ColLabel>
       </Header>
 
       <SceneList>
@@ -73,7 +73,7 @@ export default function AudioStep({ base, level, jobStep, onGenerate }: Props) {
             <AudioCell>
               {generated && audioFiles[i]
                 ? <AudioEl src={`${base}/audios/${audioFiles[i]}`} controls preload="none" />
-                : <PendingBar>▷ — sin generar</PendingBar>
+                : <PendingBar>▷ — not generated</PendingBar>
               }
             </AudioCell>
           </SceneRow>

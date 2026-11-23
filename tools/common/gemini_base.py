@@ -39,8 +39,8 @@ class GeminiBase(BaseModelTool):
         stop=stop_after_attempt(3),
         retry=retry_if_exception_type(errors.ServerError),
         before_sleep=lambda retry_state: Messenger.info(
-            f"⏳ Error de servidor en Gemini. Reintentando en 30s... "
-            f"(Intento {retry_state.attempt_number})"
+            f"⏳ Gemini server error. Retrying in 30s... "
+            f"(Attempt {retry_state.attempt_number})"
         ),
         reraise=True,
     )

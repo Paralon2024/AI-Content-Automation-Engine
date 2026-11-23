@@ -21,7 +21,8 @@ router = APIRouter(prefix="/api/ideas", tags=["ideas"])
 _RESOURCE_BASE = Path("flows/image_content_generator/resource")
 _SHORT_OUT = Path("flows/image_content_generator/out_short")
 _LONG_OUT = Path("flows/image_content_generator/out_long")
-_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+# Job logging redirects process-wide stdout/stderr, so serialize background jobs.
+_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
 
 def _out(orientation: VideoOrientation) -> Path:
@@ -91,7 +92,7 @@ def get_script(
     orientation: VideoOrientation = VideoOrientation.SHORT,
 ) -> FileResponse:
     path = _out(orientation) / "ideas" / f"idea_{idea_id:06d}" / "script.json"
-    if not path.exists():
+    if not path.is_file():
         raise HTTPException(404, "Script not found")
     return FileResponse(str(path), filename="script.json")
 
@@ -119,7 +120,7 @@ def get_video_scene(
 ) -> FileResponse:
     safe = Path(filename).name
     path = _out(orientation) / "ideas" / f"idea_{idea_id:06d}" / "videos" / safe
-    if not path.exists():
+    if not path.is_file():
         raise HTTPException(404, "Video not found")
     return FileResponse(str(path), media_type="video/mp4")
 
@@ -143,7 +144,7 @@ def get_audio(
 ) -> FileResponse:
     safe = Path(filename).name
     path = _out(orientation) / "ideas" / f"idea_{idea_id:06d}" / "audios" / safe
-    if not path.exists():
+    if not path.is_file():
         raise HTTPException(404, "Audio not found")
     return FileResponse(str(path), media_type="audio/wav")
 
@@ -156,7 +157,7 @@ def get_edition(
 ) -> FileResponse:
     safe = Path(filename).name
     path = _out(orientation) / "ideas" / f"idea_{idea_id:06d}" / "editions" / safe
-    if not path.exists():
+    if not path.is_file():
         raise HTTPException(404, "Edition not found")
     return FileResponse(str(path), media_type="video/mp4")
 
@@ -168,20 +169,22 @@ async def upload_script(
     title: str = "",
     orientation: VideoOrientation = VideoOrientation.SHORT,
 ) -> dict[str, Any]:
-    content = await file.read()
+    content = await file.read(10 * 1024 * 1024 + 1)
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(413, "Script file is too large (10 MB maximum)")
     try:
         VideoScript.model_validate_json(content)
     except Exception as exc:
         raise HTTPException(422, f"Invalid script.json: {exc}")
 
-    idea_dir = _out(orientation) / "ideas" / f"idea_{idea_id:06d}"
-    idea_dir.mkdir(parents=True, exist_ok=True)
-    (idea_dir / "script.json").write_bytes(content)
-
     st = _store(orientation)
     idea = st.get_by_id(idea_id)
     if not idea:
         raise HTTPException(404, "Idea not found")
+
+    idea_dir = _out(orientation) / "ideas" / f"idea_{idea_id:06d}"
+    idea_dir.mkdir(parents=True, exist_ok=True)
+    (idea_dir / "script.json").write_bytes(content)
 
     if title:
         idea.title = title
@@ -197,18 +200,40 @@ async def upload_videos(
     files: List[UploadFile] = File(...),
     orientation: VideoOrientation = VideoOrientation.SHORT,
 ) -> dict[str, Any]:
-    videos_dir = _out(orientation) / "ideas" / f"idea_{idea_id:06d}" / "videos"
-    videos_dir.mkdir(parents=True, exist_ok=True)
-
-    sorted_files = sorted(files, key=lambda f: f.filename or "")
-    for i, file in enumerate(sorted_files, start=1):
-        content = await file.read()
-        (videos_dir / f"scene_{i:04d}.mp4").write_bytes(content)
-
     st = _store(orientation)
     idea = st.get_by_id(idea_id)
     if not idea:
         raise HTTPException(404, "Idea not found")
+
+    videos_dir = _out(orientation) / "ideas" / f"idea_{idea_id:06d}" / "videos"
+    videos_dir.mkdir(parents=True, exist_ok=True)
+
+    sorted_files = sorted(files, key=lambda f: f.filename or "")
+    for file in sorted_files:
+        if Path((file.filename or "").replace("\\", "/")).suffix.lower() != ".mp4":
+            raise HTTPException(415, f"Only MP4 scene videos are supported: {file.filename}")
+
+    for i, file in enumerate(sorted_files, start=1):
+        target = videos_dir / f"scene_{i:04d}.mp4"
+        temporary = target.with_name(target.name + ".uploading")
+        total_size = 0
+        try:
+            with temporary.open("wb") as destination:
+                while chunk := await file.read(1024 * 1024):
+                    total_size += len(chunk)
+                    if total_size > 500 * 1024 * 1024:
+                        raise HTTPException(
+                            413,
+                            f"Scene video is too large (500 MB maximum): {file.filename}",
+                        )
+                    destination.write(chunk)
+            with temporary.open("rb") as uploaded_file:
+                if b"ftyp" not in uploaded_file.read(16):
+                    raise HTTPException(415, f"Invalid MP4 file: {file.filename}")
+            temporary.replace(target)
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            raise
 
     idea.state = State.VIDEOS_GENERATED
     st.save(idea)
@@ -280,9 +305,16 @@ def assemble_video(
     bg_volume: float = Form(...),
     music_path: str = Form(...),
 ) -> dict[str, str]:
-    full_music_path = _RESOURCE_BASE / "bg-music" / music_path
-    if not full_music_path.exists():
+    music_root = (_RESOURCE_BASE / "bg-music").resolve()
+    full_music_path = (music_root / music_path).resolve()
+    try:
+        full_music_path.relative_to(music_root)
+    except ValueError as exc:
+        raise HTTPException(400, "Invalid music path") from exc
+    if not full_music_path.is_file():
         raise HTTPException(404, f"Music file not found: {music_path}")
+    if not 0 <= bg_volume <= 1:
+        raise HTTPException(422, "Background volume must be between 0 and 1")
 
     job_id = job_manager.create_job()
     p = _pipeline(orientation)

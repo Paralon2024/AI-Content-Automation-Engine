@@ -14,7 +14,6 @@ interface Props {
   showForm: boolean
   scriptMode: 'generate' | 'upload'
   uploadingScript: boolean
-  onSetShowForm: (v: boolean) => void
   onSetScriptMode: (m: 'generate' | 'upload') => void
   onSubmit: (form: ScriptFormData) => void
   onUpload: (file: File) => void
@@ -23,7 +22,7 @@ interface Props {
 export default function ScriptStep({
   idea, base, level, jobStep,
   showForm, scriptMode, uploadingScript,
-  onSetShowForm, onSetScriptMode, onSubmit, onUpload,
+  onSetScriptMode, onSubmit, onUpload,
 }: Props) {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -41,18 +40,18 @@ export default function ScriptStep({
             <>
               <ScriptForm initial={idea.form ?? DEFAULT_FORM} onSubmit={onSubmit} />
               <UploadLink onClick={() => onSetScriptMode('upload')}>
-                ¿Ya tienes un script? Subir archivo JSON
+                Already have a script? Upload a JSON file
               </UploadLink>
             </>
           ) : (
             <UploadWrap>
               <BackLink onClick={() => onSetScriptMode('generate')}>
-                ← Volver a generar con IA
+                ← Back to AI generation
               </BackLink>
               <JsonUploadZone>
                 <input type="file" accept=".json,application/json" onChange={handleFileChange} disabled={uploadingScript} />
-                {uploadingScript ? '⏳ Subiendo…' : '↑ Selecciona un script.json'}
-                <span style={{ fontSize: '11px', opacity: 0.6 }}>Debe cumplir el esquema VideoScript</span>
+                {uploadingScript ? '⏳ Uploading…' : '↑ Select a script.json'}
+                <span style={{ fontSize: '11px', opacity: 0.6 }}>Must match the VideoScript schema</span>
               </JsonUploadZone>
             </UploadWrap>
           )}

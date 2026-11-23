@@ -8,7 +8,7 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class GeminiTextGenerator(GeminiBase):
-    text_model: str = "gemini-3.1-flash-lite-preview"
+    text_model: str = "gemini-3.1-flash-lite"
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
@@ -17,17 +17,18 @@ class GeminiTextGenerator(GeminiBase):
         """
         Generates content with Gemini and parses it into a Pydantic model.
         """
-        response = self.client.models.generate_content(
+        response = self._execute_with_retry(
+            self.client.models.generate_content,
             model=self.text_model,
             contents=prompt,
             config={
-                'response_mime_type': 'application/json',
-                'response_schema': schema,
-            }
+                "response_mime_type": "application/json",
+                "response_schema": schema,
+            },
         )
         self._extract_usage(response, self.text_model)
 
         if not response.text:
-            raise RuntimeError("❌ No hay respuesta de Gemini")
+            raise RuntimeError("❌ Gemini returned no response")
 
         return schema.model_validate_json(response.text)

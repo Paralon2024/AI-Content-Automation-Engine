@@ -14,17 +14,17 @@ import {
 
 const STEPS: PipelineStep[] = [
   { num: '01', title: 'Script' },
-  { num: '02', title: 'Escenas' },
-  { num: '03', title: 'Voz en off' },
-  { num: '04', title: 'Ensamblado' },
-  { num: '05', title: 'Subtítulos y música' },
+  { num: '02', title: 'Scenes' },
+  { num: '03', title: 'Voiceover' },
+  { num: '04', title: 'Assembly' },
+  { num: '05', title: 'Subtitles & Music' },
 ]
 
 const STATUS_LABEL: Record<string, string> = {
-  running: '⟳ Procesando',
-  done:    '✓ Completado',
-  active:  '● En progreso',
-  locked:  '— Pendiente',
+  running: '⟳ Processing',
+  done:    '✓ Completed',
+  active:  '● In progress',
+  locked:  '— Pending',
 }
 
 interface Props { idea: Idea; onUpdate: () => void }
@@ -42,7 +42,7 @@ export default function StepWizard({ idea, onUpdate }: Props) {
           idea={idea} base={base} level={w.level}
           jobStep={w.scriptStep}
           showForm={w.showForm} scriptMode={w.scriptMode} uploadingScript={w.uploadingScript}
-          onSetShowForm={w.setShowForm} onSetScriptMode={w.setScriptMode}
+          onSetScriptMode={w.setScriptMode}
           onSubmit={w.handleScript} onUpload={w.handleScriptUpload}
         />
       )
@@ -98,7 +98,7 @@ export default function StepWizard({ idea, onUpdate }: Props) {
             {STATUS_LABEL[status]}
           </StepDetailStatus>
 
-          {/* Acciones contextuales del paso actual */}
+          {/* Actions for the current step */}
           {w.selected === 0 && w.level >= 1 && !w.showForm && !w.scriptStep.jobId && (
             <>
               <BtnSecondary style={{ marginLeft: 'auto' }} onClick={() => {
@@ -107,9 +107,9 @@ export default function StepWizard({ idea, onUpdate }: Props) {
                 a.download = `script_${idea.id}.json`
                 a.click()
               }}>
-                ↓ Descargar script
+                ↓ Download script
               </BtnSecondary>
-              <BtnSecondary onClick={() => w.setShowForm(true)}>↺ Regenerar</BtnSecondary>
+              <BtnSecondary onClick={() => w.setShowForm(true)}>↺ Regenerate</BtnSecondary>
             </>
           )}
 
@@ -118,13 +118,13 @@ export default function StepWizard({ idea, onUpdate }: Props) {
               style={{ marginLeft: w.selected === 0 ? undefined : 'auto' }}
               onClick={() => w.setSelected(w.selected + 1)}
             >
-              Siguiente →
+              Next →
             </BtnPrimary>
           )}
 
           {w.selected === STEPS.length - 1 && w.level >= 7 && !w.subsStep.jobId && !w.assemble.jobId && (
             <>
-              <DoneText style={{ marginLeft: 'auto' }} $completed>🎬 Video completado</DoneText>
+              <DoneText style={{ marginLeft: 'auto' }} $completed>🎬 Video completed</DoneText>
               <BtnPrimary
                 onClick={() => {
                   const a = document.createElement('a')
@@ -133,7 +133,7 @@ export default function StepWizard({ idea, onUpdate }: Props) {
                   a.click()
                 }}
               >
-                ⬇ Descargar video
+                ⬇ Download video
               </BtnPrimary>
             </>
           )}

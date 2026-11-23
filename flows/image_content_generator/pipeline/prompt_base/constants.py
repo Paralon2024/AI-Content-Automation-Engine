@@ -13,56 +13,56 @@ STYLE_DESCRIPTIONS: dict[str, str] = {
 }
 
 TONE_DESCRIPTIONS: dict[str, str] = {
-    "motivacional": "motivacional y enérgico, con urgencia y convicción, que inspire acción inmediata",
-    "educativo": "educativo y claro, con explicaciones precisas y ejemplos concretos, tono de mentor experto",
-    "dramatico": "dramático y tenso, con narrativa de suspenso, giros inesperados e impacto emocional fuerte",
-    "entretenimiento": "entretenido y dinámico, con ritmo ágil, momentos de sorpresa y enganche constante",
-    "inspiracional": "inspiracional y emotivo, con historias de superación, valores universales y mensaje poderoso",
+    "motivacional": "motivational and energetic, with urgency and conviction that inspires immediate action",
+    "educativo": "educational and clear, with precise explanations and concrete examples, using the tone of an expert mentor",
+    "dramatico": "dramatic and tense, with suspenseful storytelling, unexpected twists, and strong emotional impact",
+    "entretenimiento": "entertaining and dynamic, with a fast pace, surprising moments, and continuous engagement",
+    "inspiracional": "inspirational and emotional, with stories of overcoming challenges, universal values, and a powerful message",
 }
 
 CATEGORY_DESCRIPTIONS: dict[str, str] = {
-    "finanzas": "finanzas personales — dinero, inversión, ahorro y libertad financiera",
-    "horror": "horror psicológico — suspenso, miedos, fenómenos inexplicables e historias perturbadoras",
-    "motivacion": "superación personal — mentalidad de crecimiento, disciplina y logro de metas",
-    "historia": "hechos históricos — personajes y eventos fascinantes que cambiaron el mundo",
-    "ciencia": "ciencia y tecnología — descubrimientos, innovación y curiosidades del universo",
+    "finanzas": "personal finance — money, investing, saving, and financial freedom",
+    "horror": "psychological horror — suspense, fears, unexplained phenomena, and disturbing stories",
+    "motivacion": "personal growth — growth mindset, discipline, and achieving goals",
+    "historia": "historical events — fascinating people and events that changed the world",
+    "ciencia": "science and technology — discoveries, innovation, and fascinating facts about the universe",
 }
 
-FORM_SCRIPT_PROMPT: str = """# 🎬 GENERADOR DE SCRIPT — VIDEO SHORT
+FORM_SCRIPT_PROMPT: str = """# 🎬 SHORT-FORM VIDEO SCRIPT GENERATOR
 
-## CONTEXTO DE CREACIÓN
-**Idea central:** {idea}
-**Categoría:** {category_desc}
-**Tono narrativo:** {tone_desc}
-**Formato de video:** {aspect_ratio}
+## CREATION CONTEXT
+**Core idea:** {idea}
+**Category:** {category_desc}
+**Narrative tone:** {tone_desc}
+**Video format:** {aspect_ratio}
 
-## ESTILO VISUAL (OBLIGATORIO PARA TODOS LOS image_prompt)
-Usa EXACTAMENTE este estilo en el campo `style` de cada escena:
+## VISUAL STYLE (REQUIRED FOR EVERY image_prompt)
+Use EXACTLY this style in the `style` field of every scene:
 `{style_desc}`
-Usa EXACTAMENTE este aspect_ratio en el campo `aspect_ratio` de cada escena:
+Use EXACTLY this aspect_ratio in the `aspect_ratio` field of every scene:
 `{aspect_ratio}`
 
-## ESTRUCTURA DEL GUION (MANDATORIA)
-1. **Acto 1 — Hook [Escenas 1-4]:** Gancho que detenga el scroll en los primeros 3 segundos. Arranca con la idea central de forma impactante.
-2. **Acto 2 — Desarrollo [Escenas 5-10]:** Desarrolla la idea con información valiosa, datos o narrativa que enganchen.
-3. **Acto 3 — Cierre [Escenas 11-final]:** Conclusión poderosa con llamado a la acción o reflexión final memorable.
+## REQUIRED SCRIPT STRUCTURE
+1. **Act 1 — Hook [Scenes 1–4]:** Stop the scroll within the first 3 seconds. Open with a compelling version of the core idea.
+2. **Act 2 — Development [Scenes 5–10]:** Develop the idea with valuable information, facts, or engaging storytelling.
+3. **Act 3 — Closing [Scene 11 to the end]:** Deliver a powerful conclusion with a call to action or memorable final reflection.
 
-## REGLAS OBLIGATORIAS
+## REQUIRED RULES
 
-### NARRACIÓN
-- Frases cortas, directas y con ritmo acorde al tono indicado
-- Campo `narration` siempre en **ESPAÑOL LATINOAMERICANO**
-- Máximo una frase de narración por escena
+### NARRATION
+- Use short, direct sentences with pacing that matches the requested tone.
+- The `narration` field must always be written in **ENGLISH**.
+- Use no more than one narration sentence per scene.
 
-### IMAGEN Y VIDEO
-- Campos `image_prompt` (subjects, environment, lighting, composition, style) en **INGLÉS**
-- Campos `video_prompt` (motion, camera_movement, transition, duration_hint) en **INGLÉS**
-- El `image_prompt` debe ilustrar visualmente lo que dice la narración
-- Las imágenes deben mostrar progresión narrativa coherente
+### IMAGE AND VIDEO
+- Write `image_prompt` fields (subjects, environment, lighting, composition, and style) in **ENGLISH**.
+- Write `video_prompt` fields (motion, camera_movement, transition, and duration_hint) in **ENGLISH**.
+- The `image_prompt` must visually illustrate the narration.
+- Images must show coherent narrative progression.
 
-### ESTRUCTURA
-- Entre **12 y 16 escenas**
-- Numeración secuencial desde 1
+### STRUCTURE
+- Include **12 to 16 scenes**.
+- Number scenes sequentially, starting at 1.
 """
 
 # ====================================================================================
@@ -72,15 +72,15 @@ Usa EXACTAMENTE este aspect_ratio en el campo `aspect_ratio` de cada escena:
 
 CHUNK_INSTRUCTIONS: str = """
 ---
-## 🎬 INSTRUCCIONES DE CONTINUIDAD (MÓDULO DE ESCENAS)
-Actualmente estás generando una sección del guion completo.
+## 🎬 CONTINUITY INSTRUCTIONS (SCENE MODULE)
+You are currently generating one section of the complete script.
 
-**RANGO DE ESCENAS:** DEBES generar exactamente las escenas de la **{start_scene} a la {end_scene}**.
+**SCENE RANGE:** You MUST generate exactly the scenes from **{start_scene} through {end_scene}**.
 
-**CONTEXTO NARRATIVO ANTERIOR:**
+**PREVIOUS STORY CONTEXT:**
 {context}
 
-**REGLA DE HILACIÓN:** Asegúrate de que la transición entre la última escena conocida y la nueva escena ({start_scene}) sea fluida, lógica y mantenga la misma atmósfera cinematográfica. No repitas escenas, solo continúa la historia. Mantén la numeración secuencial.
+**CONTINUITY RULE:** Ensure the transition from the last known scene to the new scene ({start_scene}) is smooth and logical, while preserving the same cinematic atmosphere. Do not repeat scenes; continue the story and keep the numbering sequential.
 ---
 """
 
@@ -88,36 +88,34 @@ Actualmente estás generando una sección del guion completo.
 # CORE PROMPTS
 # ====================================================================================
 
-AUDIO_PROMPT: str = """Narra el siguiente guion con voz clara, expresiva y envolvente. Adapta el tono al contenido: si es dramático sube la intensidad, si es educativo mantén ritmo firme y seguro, si es motivacional transmite energía y convicción. Lee exactamente el texto tal cual aparece, sin omitir ni agregar nada:
+AUDIO_PROMPT: str = """{audio_text}"""
 
-{audio_text}"""
+ALIGNMENT_PROMPT: str = """# 🧠 MASTER PROMPT — AUDIO AND TEXT ALIGNMENT
 
-ALIGNMENT_PROMPT: str = """# 🧠 PROMPT MAESTRO — ALINEAMIENTO DE AUDIO Y TEXTO
-
-Eres un experto en el alineamiento de audio y texto. Tu tarea es identificar los tiempos exactos de inicio y fin para cada escena del guion basándote en los datos de Whisper.
+You are an expert in audio-to-text alignment. Your task is to identify the exact start and end times for each script scene based on the Whisper transcription data.
 
 ---
 
-## 🔹 DATOS DE WHISPER (Con timestamps)
+## 🔹 WHISPER DATA (WITH TIMESTAMPS)
 {whisper_data}
 
 ---
 
-## 📝 GUION ORIGINAL (Escenas)
+## 📝 ORIGINAL SCRIPT (SCENES)
 {scenes_data}
 
 ---
 
-## 📋 INSTRUCCIONES (CRÍTICAS)
-1. Debes devolver exactamente {expected_count} escenas en el JSON.
-2. Para cada escena, identifica el tiempo de inicio (`start_time`) y fin (`end_time`) en el audio.
-3. El inicio de la escena 1 suele ser 0.000s.
-4. El fin de una escena debe coincidir con el inicio de la siguiente.
-4. Sé preciso. Ignora pequeñas diferencias de palabras entre el guion y el audio.
-5. Responde exclusivamente en formato JSON.
+## 📋 INSTRUCTIONS (CRITICAL)
+1. Return exactly {expected_count} scenes in the JSON.
+2. For each scene, identify its start time (`start_time`) and end time (`end_time`) in the audio.
+3. Scene 1 usually starts at 0.000 seconds.
+4. The end of one scene must match the start of the next scene.
+5. Be precise. Ignore minor wording differences between the script and the audio.
+6. Respond exclusively in JSON format.
 
-## 📦 FORMATO DE SALIDA (JSON)
-Responde exclusivamente con el siguiente esquema JSON:
+## 📦 OUTPUT FORMAT (JSON)
+Respond exclusively using the following JSON schema:
 ```json
 {{
   "alignments": [
