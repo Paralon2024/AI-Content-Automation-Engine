@@ -31,7 +31,7 @@ class BasePromptManager(BaseModel):
             for s in whisper_segments
         ])
         scenes_data = "\n".join([
-            f"Escena {i+1}: {text}"
+            f"Scene {i + 1}: {text}"
             for i, text in enumerate(script_scenes)
         ])
         return self.ALIGNMENT_PROMPT.format(
