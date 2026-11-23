@@ -21,7 +21,7 @@ class GeminiVideoGenerator(GeminiBase):
     api_url: str = "https://generativelanguage.googleapis.com/v1beta/interactions"
     aspect_ratio: str = "9:16"
     duration: str = "8s"
-    resolution: str = "1080p"
+    resolution: str = "720p"
 
     def generate_video(
         self,
@@ -41,6 +41,8 @@ class GeminiVideoGenerator(GeminiBase):
 
         if not prompt.strip():
             raise ValueError("Video prompt cannot be empty")
+        if img_end_path and not img_start_path:
+            raise ValueError("An end-frame image requires a start-frame image")
 
         out_path_obj = Path(out_path)
         out_path_obj.parent.mkdir(parents=True, exist_ok=True)
@@ -107,7 +109,7 @@ class GeminiVideoGenerator(GeminiBase):
         except urllib.error.URLError as exc:
             raise RuntimeError(f"Could not connect to the Gemini video API: {exc}") from exc
 
-        encoded_video = None
+        encoded_video = (result.get("output_video") or {}).get("data")
         for step in result.get("steps", []):
             if step.get("type") != "model_output":
                 continue
