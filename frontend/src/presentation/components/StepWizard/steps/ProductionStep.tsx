@@ -56,7 +56,7 @@ export default function ProductionStep({ base, level, subsStep, assembleStep, on
         <MusicLibrary selected={selectedPath} onSelect={setSelectedPath} volume={volume / 100} />
 
         <VolumeRow>
-          <VolumeLabel>Volumen</VolumeLabel>
+          <VolumeLabel>Volume</VolumeLabel>
           <VolumeSlider
             type="range" min={0} max={100} value={volume}
             onChange={e => setVolume(Number(e.target.value))}
