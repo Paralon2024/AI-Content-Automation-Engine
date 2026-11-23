@@ -36,7 +36,7 @@ export default function VideoSequence({ baseUrl, synced, sectionLabel }: Props) 
   const label = sectionLabel ?? (synced ? 'Videos sincronizados' : 'Videos')
 
   if (loading) return null
-  if (!files.length) return <EmptyState>Sin archivos de video</EmptyState>
+  if (!files.length) return <EmptyState>No video files found</EmptyState>
 
   return (
     <Wrap>
