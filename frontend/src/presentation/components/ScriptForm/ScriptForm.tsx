@@ -4,26 +4,26 @@ import { Form, Field, Label, TextArea, TextInput, Row, Select, SubmitBtn } from 
 
 const STYLES = [
   { value: 'stickman', label: 'Stickman / Sketch' },
-  { value: 'realistic', label: 'Realista / Cinematográfico' },
+  { value: 'realistic', label: 'Realistic / Cinematic' },
   { value: 'anime', label: 'Anime / Manga' },
-  { value: 'watercolor', label: 'Acuarela / Artístico' },
-  { value: 'flat', label: 'Flat / Minimalista' },
+  { value: 'watercolor', label: 'Watercolor / Artistic' },
+  { value: 'flat', label: 'Flat / Minimalist' },
 ]
 
 const CATEGORIES = [
-  { value: 'finanzas', label: 'Finanzas' },
+  { value: 'finanzas', label: 'Finance' },
   { value: 'horror', label: 'Horror / Thriller' },
-  { value: 'motivacion', label: 'Motivación' },
-  { value: 'historia', label: 'Historia / Documental' },
-  { value: 'ciencia', label: 'Ciencia / Tech' },
+  { value: 'motivacion', label: 'Motivation' },
+  { value: 'historia', label: 'History / Documentary' },
+  { value: 'ciencia', label: 'Science / Technology' },
 ]
 
 const TONES = [
-  { value: 'motivacional', label: 'Motivacional' },
-  { value: 'educativo', label: 'Educativo' },
-  { value: 'dramatico', label: 'Dramático' },
-  { value: 'entretenimiento', label: 'Entretenimiento' },
-  { value: 'inspiracional', label: 'Inspiracional' },
+  { value: 'motivacional', label: 'Motivational' },
+  { value: 'educativo', label: 'Educational' },
+  { value: 'dramatico', label: 'Dramatic' },
+  { value: 'entretenimiento', label: 'Entertainment' },
+  { value: 'inspiracional', label: 'Inspirational' },
 ]
 
 const ASPECT_RATIOS = [
@@ -67,11 +67,11 @@ function SelectField({
         {options.map(o => (
           <option key={o.value} value={o.value} disabled={o.disabled}>{o.label}</option>
         ))}
-        {showCustom && <option value={CUSTOM}>Personalizado...</option>}
+        {showCustom && <option value={CUSTOM}>Custom...</option>}
       </Select>
       {isCustomMode && (
         <TextInput
-          placeholder={`Escribe tu propio ${fieldLabel.toLowerCase()}...`}
+          placeholder={`Enter your custom ${fieldLabel.toLowerCase()}...`}
           value={currentValue}
           onChange={e => onCustomChange(e.target.value)}
           autoFocus
@@ -123,9 +123,9 @@ export default function ScriptForm({ initial, onSubmit }: ScriptFormProps) {
   return (
     <Form onSubmit={handleSubmit}>
       <Field>
-        <Label>Idea / Tema *</Label>
+        <Label>Idea / Topic *</Label>
         <TextArea
-          placeholder="Ej: La regla del 50/30/20 para ahorrar dinero y alcanzar libertad financiera..."
+          placeholder="Ej: The 50/30/20 rule for saving money and achieving financial freedom..."
           value={data.idea}
           onChange={e => set('idea', e.target.value)}
         />
@@ -133,7 +133,7 @@ export default function ScriptForm({ initial, onSubmit }: ScriptFormProps) {
 
       <Row>
         <SelectField
-          fieldLabel="Estilo Visual"
+          fieldLabel="Visual Style"
           options={STYLES}
           isCustomMode={custom.style}
           currentValue={data.style}
@@ -141,7 +141,7 @@ export default function ScriptForm({ initial, onSubmit }: ScriptFormProps) {
           onCustomChange={v => set('style', v)}
         />
         <SelectField
-          fieldLabel="Categoría"
+          fieldLabel="Category"
           options={CATEGORIES}
           isCustomMode={custom.category}
           currentValue={data.category}
@@ -152,7 +152,7 @@ export default function ScriptForm({ initial, onSubmit }: ScriptFormProps) {
 
       <Row>
         <SelectField
-          fieldLabel="Tono"
+          fieldLabel="Tone"
           options={TONES}
           isCustomMode={custom.tone}
           currentValue={data.tone}
@@ -171,7 +171,7 @@ export default function ScriptForm({ initial, onSubmit }: ScriptFormProps) {
       </Row>
 
       <SubmitBtn type="submit" disabled={!data.idea.trim()}>
-        Generar Script
+        Generate Script
       </SubmitBtn>
     </Form>
   )
