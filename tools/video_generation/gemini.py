@@ -1,8 +1,11 @@
-import time
+import base64
+import json
+import os
+import mimetypes
+import urllib.error
+import urllib.request
 from pathlib import Path
-from typing import Any, Optional
-
-from google.genai import types
+from typing import Optional
 
 from tools.common.gemini_base import GeminiBase
 from tools.common.messenger import Messenger
@@ -10,99 +13,123 @@ from tools.common.messenger import Messenger
 
 class GeminiVideoGenerator(GeminiBase):
     """
-    Tool for generating videos using Gemini Veo 3.1 models.
-    Supports text-to-video and image-to-video interpolation.
+    Generate short clips with Gemini Omni through the Gemini Interactions API.
+    Supports text-to-video, image-to-video, and first/last-frame interpolation.
     """
-    video_model: str = "veo-3.1-fast-generate-preview"
+
+    video_model: str = "gemini-omni-1.2-flash"
+    api_url: str = "https://generativelanguage.googleapis.com/v1beta/interactions"
+    aspect_ratio: str = "9:16"
+    duration: str = "8s"
+    resolution: str = "1080p"
 
     def generate_video(
         self,
         prompt: str,
         out_path: str,
         img_start_path: Optional[str] = None,
-        img_end_path: Optional[str] = None
+        img_end_path: Optional[str] = None,
     ) -> None:
         """
-        Generates a high-fidelity video using Veo 3.1 and saves it to disk.
-        Supports three modes of generation based on provided inputs:
+        Generate an MP4 clip and save it to disk.
 
-        Modes:
-        1. Text-to-Video: Provide ONLY 'prompt'. Generates video from scratch.
-        2. Image-to-Video: Provide 'prompt' + 'img_start_path'. Generates video
-           starting from the provided initial frame.
-        3. Frame Interpolation: Provide 'prompt' + 'img_start_path' + 'img_end_path'.
-           Generates a transition where 'img_start' is the first frame and
-           'img_end' is the last frame constraint.
-
-        Technical Parameters:
-        - Resolution: 1080p (Optimized for generation cost/performance).
-        - Aspect Ratio: 9:16 (Portrait format for mobile/social media).
-        - Model: veo-3.1-fast-generate-preview.
+        The Gemini Developer API video model requires a billed Tier 1 project.
         """
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise RuntimeError("GEMINI_API_KEY is not configured")
+
+        if not prompt.strip():
+            raise ValueError("Video prompt cannot be empty")
+
         out_path_obj = Path(out_path)
         out_path_obj.parent.mkdir(parents=True, exist_ok=True)
 
-        Messenger.info(f"🚀 Starting AI Video generation: {out_path_obj.name}...")
+        input_items: list[dict[str, str]] = []
 
-        # 1. Setup Configuration
-        # We enforce 9:16 and 1080p for consistency across the pipeline.
-        config_args: dict[str, Any] = {
-            "aspect_ratio": "9:16",
-            "resolution": "1080p"
+        for image_path in (img_start_path, img_end_path):
+            if not image_path:
+                continue
+            path = Path(image_path)
+            if not path.is_file():
+                raise FileNotFoundError(f"Reference image not found: {path}")
+
+            mime_type, _ = mimetypes.guess_type(path.name)
+            if mime_type not in {"image/png", "image/jpeg", "image/webp"}:
+                raise ValueError(f"Unsupported reference image type: {path.name}")
+
+            input_items.append(
+                {
+                    "type": "image",
+                    "data": base64.b64encode(path.read_bytes()).decode("ascii"),
+                    "mime_type": mime_type,
+                }
+            )
+
+        input_items.append({"type": "text", "text": prompt})
+        task = "image_to_video" if img_start_path else "text_to_video"
+
+        payload = {
+            "model": self.video_model,
+            "store": False,
+            "input": input_items,
+            "response_format": {
+                "type": "video",
+                "duration": self.duration,
+                "resolution": self.resolution,
+                "aspect_ratio": self.aspect_ratio,
+            },
+            "generation_config": {
+                "video_config": {"task": task},
+            },
         }
 
-        # 'last_frame' serves as a visual constraint for the end of the video.
-        if img_end_path:
-            config_args["last_frame"] = types.Image(
-                image_bytes=Path(img_end_path).read_bytes(),
-                mime_type="image/png"
-            )
-        config = types.GenerateVideosConfig(**config_args)
-
-        # 2. Prepare Primary Image Input
-        # For Veo 3, image data MUST be passed as a types.Image object with
-        # explicit bytes and mime_type to satisfy the API contract.
-        image_input = None
-        if img_start_path:
-            image_input = types.Image(
-                image_bytes=Path(img_start_path).read_bytes(),
-                mime_type="image/png"
-            )
-
-        # 3. Trigger Asynchronous Generation
-        operation = self.client.models.generate_videos(
-            model=self.video_model,
-            prompt=prompt,
-            image=image_input,
-            config=config
+        request = urllib.request.Request(
+            self.api_url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": api_key,
+            },
+            method="POST",
         )
 
-        # 4. Polling for Completion
-        # Video generation is a heavy process. We poll every 15 seconds.
-        while not operation.done:
-            Messenger.info("⏳ Waiting for video generation (polling)...")
-            time.sleep(15)
-            operation = self.client.operations.get(operation)
+        Messenger.info(f"Starting Gemini video generation: {out_path_obj.name}")
 
-        # 5. Result Validation
-        if operation.error:
-            raise RuntimeError(f"❌ Video generation failed: {operation.error}")
+        try:
+            with urllib.request.urlopen(request, timeout=900) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            details = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"Gemini video request failed (HTTP {exc.code}): {details}"
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Could not connect to the Gemini video API: {exc}") from exc
 
-        # 6. Success: Download and Persist
-        # The operation response contains metadata and the generated video object.
-        if not operation.response:
-            raise RuntimeError("❌ Video generation succeeded but operation.response is empty.")
+        encoded_video = None
+        for step in result.get("steps", []):
+            if step.get("type") != "model_output":
+                continue
+            for item in step.get("content", []):
+                if item.get("type") == "video" and item.get("data"):
+                    encoded_video = item["data"]
+                    break
+            if encoded_video:
+                break
 
-        generated_videos = getattr(operation.response, "generated_videos", [])
-        if not generated_videos:
-            raise RuntimeError("❌ Video generation succeeded but no videos were found in response.")
+        if not encoded_video:
+            raise RuntimeError(
+                f"Gemini returned no video data. Response status: {result.get('status')}"
+            )
 
-        video_metadata = generated_videos[0]
-        video_obj = getattr(video_metadata, "video", None)
-        if not video_obj:
-            raise RuntimeError("❌ Video metadata found but video object is missing.")
+        try:
+            video_bytes = base64.b64decode(encoded_video, validate=True)
+        except (ValueError, TypeError) as exc:
+            raise RuntimeError("Gemini returned invalid base64 video data") from exc
 
-        self.client.files.download(file=video_obj)
-        video_obj.save(out_path)
+        if b"ftyp" not in video_bytes[:16]:
+            raise RuntimeError("Gemini returned data that is not a valid MP4 file")
 
-        Messenger.success(f"Video saved: {out_path}")
+        out_path_obj.write_bytes(video_bytes)
+        Messenger.success(f"Video saved: {out_path_obj}")
