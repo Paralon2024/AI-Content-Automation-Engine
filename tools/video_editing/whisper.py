@@ -39,7 +39,7 @@ class WhisperTool(BaseModelTool):
             cmd_args = [
                 "whisper-cli",
                 "-m", self.DEFAULT_MODEL,
-                "-l", "es",
+                "-l", "en",
                 "-ojf",
                 "-f", str(audio_path)
             ]
