@@ -51,10 +51,11 @@ class GeminiImageGenerator(GeminiBase):
             image_config=types.ImageConfig(aspect_ratio=self.aspect_ratio, image_size="1K")
         )
 
-        response = self.client.models.generate_content(
+        response = self._execute_with_retry(
+            self.client.models.generate_content,
             model=self.image_model,
             contents=contents,
-            config=config
+            config=config,
         )
 
         if not response or not response.parts:
