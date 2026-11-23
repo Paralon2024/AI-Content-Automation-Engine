@@ -21,7 +21,8 @@ router = APIRouter(prefix="/api/ideas", tags=["ideas"])
 _RESOURCE_BASE = Path("flows/image_content_generator/resource")
 _SHORT_OUT = Path("flows/image_content_generator/out_short")
 _LONG_OUT = Path("flows/image_content_generator/out_long")
-_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+# Job logging redirects process-wide stdout/stderr, so serialize background jobs.
+_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
 
 def _out(orientation: VideoOrientation) -> Path:
