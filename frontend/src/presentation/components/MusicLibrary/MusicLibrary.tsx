@@ -38,10 +38,10 @@ function TreeNode({
           <span style={{ fontSize: 10 }}>{open ? '▾' : '▸'}</span>
           <span>📁</span>
           <span style={{ flex: 1, color: 'inherit' }}>{node.name}</span>
-          <FolderCount>{count} {count === 1 ? 'pista' : 'pistas'}</FolderCount>
+          <FolderCount>{count} {count === 1 ? 'track' : 'tracks'}</FolderCount>
           <ActionBtn
             className="del"
-            title="Eliminar carpeta"
+            title="Delete folder"
             onClick={e => { e.stopPropagation(); onDelete(node.path, true) }}
           >✕</ActionBtn>
         </FolderRow>
@@ -67,16 +67,16 @@ function TreeNode({
     >
       <span style={{ fontSize: 13 }}>♫</span>
       <FileName title={node.name}>{node.name}</FileName>
-      {isSelected && <SelectedBadge>✓ seleccionada</SelectedBadge>}
+      {isSelected && <SelectedBadge>✓ selected</SelectedBadge>}
       <div className="actions" style={{ display: 'flex', gap: 2 }}>
         <ActionBtn
-          title={isPreviewing ? 'Detener' : 'Vista previa'}
+          title={isPreviewing ? 'Stop' : 'Preview'}
           onClick={e => { e.stopPropagation(); onPreview(isPreviewing ? '' : node.path) }}
         >
           {isPreviewing ? '■' : '▶'}
         </ActionBtn>
         <ActionBtn
-          title="Eliminar"
+          title="Delete"
           onClick={e => { e.stopPropagation(); onDelete(node.path, false) }}
         >✕</ActionBtn>
       </div>
@@ -150,8 +150,8 @@ export default function MusicLibrary({ selected, onSelect, volume = 1 }: Props) 
   }
 
   const handleDelete = useCallback(async (path: string, isDir: boolean) => {
-    const label = isDir ? `la carpeta "${path}" y su contenido` : `"${path}"`
-    if (!confirm(`¿Eliminar ${label}?`)) return
+    const label = isDir ? `the folder "${path}" and its contents` : `"${path}"`
+    if (!confirm(`¿Delete ${label}?`)) return
     await api.music.delete(path)
     if (selected === path) onSelect('')
     if (previewing === path) setPreviewing('')
@@ -178,10 +178,10 @@ export default function MusicLibrary({ selected, onSelect, volume = 1 }: Props) 
       />
 
       <Header>
-        <HeaderTitle>🎵 Librería de música</HeaderTitle>
-        {totalTracks > 0 && <TrackCount>{totalTracks} {totalTracks === 1 ? 'pista' : 'pistas'}</TrackCount>}
+        <HeaderTitle>🎵 Music Library</HeaderTitle>
+        {totalTracks > 0 && <TrackCount>{totalTracks} {totalTracks === 1 ? 'track' : 'tracks'}</TrackCount>}
         <UploadBtn onClick={() => uploadRef.current?.click()} disabled={uploading}>
-          {uploading ? '⏳ Subiendo…' : '↑ Subir pistas'}
+          {uploading ? '⏳ Uploading…' : '↑ Subir tracks'}
         </UploadBtn>
         <input
           ref={uploadRef}
@@ -209,10 +209,10 @@ export default function MusicLibrary({ selected, onSelect, volume = 1 }: Props) 
       <DropZone $active={dragging > 0} $uploading={uploading}>
         <DropIcon>{uploading ? '⏳' : dragging > 0 ? '🎵' : '☁'}</DropIcon>
         <span>
-          {uploading ? 'Subiendo…'
-          : dragging > 0 ? 'Suelta los archivos aquí'
-          : nodes.length === 0 ? 'Arrastra pistas de audio aquí\no haz clic para seleccionar'
-          : 'Arrastra más pistas aquí o haz clic'}
+          {uploading ? 'Uploading…'
+          : dragging > 0 ? 'Drop files here'
+          : nodes.length === 0 ? 'Arrastra tracks de audio aquí\no haz clic para seleccionar'
+          : 'Arrastra más tracks aquí o haz clic'}
         </span>
         <input
           type="file"
