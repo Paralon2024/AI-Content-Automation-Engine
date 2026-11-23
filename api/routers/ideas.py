@@ -197,8 +197,8 @@ async def upload_script(
     old_state = idea.state
 
     # Stage the new script and preserve the previous one until metadata is saved.
-    staged_script.write_bytes(content)
     try:
+        staged_script.write_bytes(content)
         if script_path.exists():
             script_path.replace(backup_script)
         staged_script.replace(script_path)
