@@ -169,7 +169,7 @@ async def upload_script(
     title: str = "",
     orientation: VideoOrientation = VideoOrientation.SHORT,
 ) -> dict[str, Any]:
-    content = await file.read()
+    content = await file.read(10 * 1024 * 1024 + 1)
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(413, "Script file is too large (10 MB maximum)")
     try:
@@ -209,13 +209,31 @@ async def upload_videos(
     videos_dir.mkdir(parents=True, exist_ok=True)
 
     sorted_files = sorted(files, key=lambda f: f.filename or "")
-    for i, file in enumerate(sorted_files, start=1):
-        if Path(file.filename or "").suffix.lower() != ".mp4":
+    for file in sorted_files:
+        if Path((file.filename or "").replace("\\", "/")).suffix.lower() != ".mp4":
             raise HTTPException(415, f"Only MP4 scene videos are supported: {file.filename}")
-        content = await file.read()
-        if len(content) > 500 * 1024 * 1024:
-            raise HTTPException(413, f"Scene video is too large (500 MB maximum): {file.filename}")
-        (videos_dir / f"scene_{i:04d}.mp4").write_bytes(content)
+
+    for i, file in enumerate(sorted_files, start=1):
+        target = videos_dir / f"scene_{i:04d}.mp4"
+        temporary = target.with_name(target.name + ".uploading")
+        total_size = 0
+        try:
+            with temporary.open("wb") as destination:
+                while chunk := await file.read(1024 * 1024):
+                    total_size += len(chunk)
+                    if total_size > 500 * 1024 * 1024:
+                        raise HTTPException(
+                            413,
+                            f"Scene video is too large (500 MB maximum): {file.filename}",
+                        )
+                    destination.write(chunk)
+            with temporary.open("rb") as uploaded_file:
+                if b"ftyp" not in uploaded_file.read(16):
+                    raise HTTPException(415, f"Invalid MP4 file: {file.filename}")
+            temporary.replace(target)
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            raise
 
     idea.state = State.VIDEOS_GENERATED
     st.save(idea)
