@@ -1,8 +1,8 @@
 import io
-import json
 import socket
+from urllib.error import HTTPError
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from tools.common.gemini_http import post_interaction
 
@@ -19,7 +19,7 @@ class GeminiHttpTests(unittest.TestCase):
 
     @patch("tools.common.gemini_http.urllib.request.urlopen")
     def test_returns_json_object(self, urlopen):
-        response = unittest.mock.MagicMock()
+        response = MagicMock()
         response.__enter__.return_value.read.return_value = b'{"status":"completed"}'
         urlopen.return_value = response
 
@@ -28,7 +28,7 @@ class GeminiHttpTests(unittest.TestCase):
 
     @patch("tools.common.gemini_http.urllib.request.urlopen")
     def test_http_error_includes_provider_message(self, urlopen):
-        error = urllib_error = __import__("urllib.error", fromlist=["HTTPError"]).HTTPError(
+        error = HTTPError(
             "https://example.invalid/interactions",
             429,
             "Too Many Requests",
