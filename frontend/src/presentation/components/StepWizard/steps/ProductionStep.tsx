@@ -38,8 +38,8 @@ export default function ProductionStep({ base, level, subsStep, assembleStep, on
   const videoLabel = level >= 7
     ? 'Video final'
     : level >= 5
-      ? 'Video con subtítulos'
-      : 'Video ensamblado (sin subtítulos)'
+      ? 'Video with subtitles'
+      : 'Assembled video (no subtitles)'
 
   if (anyRunning) {
     return (
@@ -70,10 +70,10 @@ export default function ProductionStep({ base, level, subsStep, assembleStep, on
               onClick={() => onSubs({ musicPath: selectedPath, bgVolume: volume / 100 })}
               disabled={!selectedPath}
             >
-              Poner música y generar subtítulos
+              Add music and generate subtitles
             </BtnPrimary>
             {!selectedPath && (
-              <MusicHint>Selecciona un archivo de música para continuar.</MusicHint>
+              <MusicHint>Select a music track to continue.</MusicHint>
             )}
           </ActionRow>
         )}
@@ -88,7 +88,7 @@ export default function ProductionStep({ base, level, subsStep, assembleStep, on
               ↺ Regenerar
             </BtnSecondary>
             {!selectedPath && (
-              <MusicHint>Selecciona un archivo de música para regenerar.</MusicHint>
+              <MusicHint>Select a music track to regenerate.</MusicHint>
             )}
           </ActionRow>
         )}
