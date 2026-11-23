@@ -88,9 +88,7 @@ You are currently generating one section of the complete script.
 # CORE PROMPTS
 # ====================================================================================
 
-AUDIO_PROMPT: str = """Narrate the following script with a clear, expressive, and engaging voice. Adapt the delivery to the content: increase intensity for dramatic material, maintain a steady and confident pace for educational material, and convey energy and conviction for motivational material. Read the text exactly as written, without omitting or adding anything:
-
-{audio_text}"""
+AUDIO_PROMPT: str = """{audio_text}"""
 
 ALIGNMENT_PROMPT: str = """# 🧠 MASTER PROMPT — AUDIO AND TEXT ALIGNMENT
 
