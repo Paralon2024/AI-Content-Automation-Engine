@@ -4,7 +4,7 @@ set -e
 MODEL_PATH="${WHISPER_MODEL_PATH:-/opt/whisper/ggml-small.bin}"
 
 if [ ! -f "$MODEL_PATH" ]; then
-    echo "📥 Downloading Whisper model (~150 MB)..."
+    echo "📥 Downloading Whisper small model (~466 MB)..."
     mkdir -p "$(dirname "$MODEL_PATH")"
     curl -L --retry 5 --retry-delay 5 --progress-bar \
         -o "$MODEL_PATH" \
