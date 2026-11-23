@@ -236,14 +236,14 @@ export default function MusicLibrary({ selected, onSelect, volume = 1 }: Props) 
             onChange={e => { if (audioRef.current) audioRef.current.currentTime = Number(e.target.value) }}
           />
           <TimeLabel>{formatTime(currentTime)}</TimeLabel>
-          <ActionBtn onClick={() => setPreviewing('')} title="Cerrar">✕</ActionBtn>
+          <ActionBtn onClick={() => setPreviewing('')} title="Close">✕</ActionBtn>
         </Player>
       )}
 
       {dragging > 0 && (
         <DragOverlay>
           <span style={{ fontSize: 32 }}>🎵</span>
-          <span>Suelta para subir</span>
+          <span>Drop to upload</span>
         </DragOverlay>
       )}
     </Root>
