@@ -16,7 +16,7 @@ class FFmpegTool(BaseModelTool):
     def _run(self, cmd: str) -> None:
         p = subprocess.run(cmd, shell=True)
         if p.returncode != 0:
-            raise RuntimeError(f"FFmpeg falló: {cmd}")
+            raise RuntimeError(f"FFmpeg failed: {cmd}")
 
     def split_audio(
         self,
