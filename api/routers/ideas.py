@@ -92,7 +92,7 @@ def get_script(
     orientation: VideoOrientation = VideoOrientation.SHORT,
 ) -> FileResponse:
     path = _out(orientation) / "ideas" / f"idea_{idea_id:06d}" / "script.json"
-    if not path.exists():
+    if not path.is_file():
         raise HTTPException(404, "Script not found")
     return FileResponse(str(path), filename="script.json")
 
@@ -120,7 +120,7 @@ def get_video_scene(
 ) -> FileResponse:
     safe = Path(filename).name
     path = _out(orientation) / "ideas" / f"idea_{idea_id:06d}" / "videos" / safe
-    if not path.exists():
+    if not path.is_file():
         raise HTTPException(404, "Video not found")
     return FileResponse(str(path), media_type="video/mp4")
 
@@ -144,7 +144,7 @@ def get_audio(
 ) -> FileResponse:
     safe = Path(filename).name
     path = _out(orientation) / "ideas" / f"idea_{idea_id:06d}" / "audios" / safe
-    if not path.exists():
+    if not path.is_file():
         raise HTTPException(404, "Audio not found")
     return FileResponse(str(path), media_type="audio/wav")
 
@@ -157,7 +157,7 @@ def get_edition(
 ) -> FileResponse:
     safe = Path(filename).name
     path = _out(orientation) / "ideas" / f"idea_{idea_id:06d}" / "editions" / safe
-    if not path.exists():
+    if not path.is_file():
         raise HTTPException(404, "Edition not found")
     return FileResponse(str(path), media_type="video/mp4")
 
@@ -170,6 +170,8 @@ async def upload_script(
     orientation: VideoOrientation = VideoOrientation.SHORT,
 ) -> dict[str, Any]:
     content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(413, "Script file is too large (10 MB maximum)")
     try:
         VideoScript.model_validate_json(content)
     except Exception as exc:
@@ -208,7 +210,11 @@ async def upload_videos(
 
     sorted_files = sorted(files, key=lambda f: f.filename or "")
     for i, file in enumerate(sorted_files, start=1):
+        if Path(file.filename or "").suffix.lower() != ".mp4":
+            raise HTTPException(415, f"Only MP4 scene videos are supported: {file.filename}")
         content = await file.read()
+        if len(content) > 500 * 1024 * 1024:
+            raise HTTPException(413, f"Scene video is too large (500 MB maximum): {file.filename}")
         (videos_dir / f"scene_{i:04d}.mp4").write_bytes(content)
 
     idea.state = State.VIDEOS_GENERATED
