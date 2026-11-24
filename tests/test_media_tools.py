@@ -49,7 +49,7 @@ class MediaToolDiagnosticsTests(unittest.TestCase):
         )
         self.assertEqual(
             escaped,
-            "C\\:/media/it\\'s\\, \\[final\\]\\;a\\=b.srt",
+            "C\\:/media/it\\'s\\,\\ \\[final\\]\\;a\\=b.srt",
         )
 
     def test_concat_manifest_rejects_newline_path_injection(self) -> None:
