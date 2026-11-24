@@ -196,7 +196,8 @@ def run_in_job(job_id: str, fn: object) -> None:
             try:
                 _loop.call_soon_threadsafe(finalize)
             except RuntimeError:
-                return
+                # The event loop may already be closed during process shutdown.
+                pass
 
 
 async def stream_job(job_id: str) -> AsyncGenerator[str, None]:
