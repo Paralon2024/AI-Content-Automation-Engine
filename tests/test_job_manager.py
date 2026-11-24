@@ -99,7 +99,8 @@ class JobManagerTests(unittest.IsolatedAsyncioTestCase):
         def fail() -> None:
             raise FatalJobError("fatal worker failure")
 
-        await asyncio.to_thread(job_manager.run_in_job, job_id, fail)
+        with self.assertRaisesRegex(FatalJobError, "fatal worker failure"):
+            await asyncio.to_thread(job_manager.run_in_job, job_id, fail)
 
         await asyncio.sleep(0)
         messages = await self._collect(job_id)
