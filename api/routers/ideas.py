@@ -29,7 +29,8 @@ router = APIRouter(prefix="/api/ideas", tags=["ideas"])
 _RESOURCE_BASE = Path("flows/image_content_generator/resource")
 _SHORT_OUT = Path("flows/image_content_generator/out_short")
 _LONG_OUT = Path("flows/image_content_generator/out_long")
-# Job logging redirects process-wide stdout/stderr, so serialize background jobs.
+# Keep pipeline jobs serialized while they mutate shared project assets.
+# The job manager routes their output per thread, without redirecting other threads.
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
 
