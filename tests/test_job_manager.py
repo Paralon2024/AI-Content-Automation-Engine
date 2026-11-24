@@ -54,6 +54,42 @@ class JobManagerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(captured.getvalue(), "job output")
         self.assertEqual(fallback.getvalue(), "outside output")
 
+    async def test_fast_job_logs_are_available_to_a_late_stream_subscriber(self) -> None:
+        job_id = job_manager.create_job()
+        await asyncio.to_thread(
+            job_manager.run_in_job,
+            job_id,
+            lambda: print("fast job output"),
+        )
+        # Allow the queued terminal callback to run before opening the SSE stream.
+        await asyncio.sleep(0)
+
+        self.assertIn(job_id, job_manager._jobs)
+        messages = await self._collect(job_id)
+
+        self.assertEqual(messages, ["fast job output", "[DONE]"])
+        self.assertNotIn(job_id, job_manager._jobs)
+
+    async def test_completed_job_log_cache_is_bounded(self) -> None:
+        previous_limit = job_manager._MAX_RETAINED_COMPLETED_LOGS
+        job_manager._MAX_RETAINED_COMPLETED_LOGS = 2
+        job_ids = []
+        try:
+            for _ in range(3):
+                job_id = job_manager.create_job()
+                job_ids.append(job_id)
+                await asyncio.to_thread(job_manager.run_in_job, job_id, lambda: None)
+                await asyncio.sleep(0)
+        finally:
+            job_manager._MAX_RETAINED_COMPLETED_LOGS = previous_limit
+
+        self.assertNotIn(job_ids[0], job_manager._jobs)
+        self.assertIn(job_ids[1], job_manager._jobs)
+        self.assertIn(job_ids[2], job_manager._jobs)
+        # Drain retained queues to avoid cross-test state.
+        await self._collect(job_ids[1])
+        await self._collect(job_ids[2])
+
     async def test_successful_job_emits_done(self) -> None:
         job_id = job_manager.create_job()
         await asyncio.to_thread(job_manager.run_in_job, job_id, lambda: None)
@@ -70,6 +106,8 @@ class JobManagerTests(unittest.IsolatedAsyncioTestCase):
             raise ValueError("expected test failure")
 
         await asyncio.to_thread(job_manager.run_in_job, job_id, fail)
+        # Check the stream after finalization to cover a late browser connection.
+        await asyncio.sleep(0)
         messages = await self._collect(job_id)
 
         self.assertTrue(any("expected test failure" in message for message in messages))
