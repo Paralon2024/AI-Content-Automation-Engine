@@ -62,6 +62,24 @@ class AudioAlignmentValidationTests(unittest.TestCase):
                 ]
             })
 
+    def test_rejects_overlapping_scene_time_ranges(self) -> None:
+        with self.assertRaisesRegex(ValidationError, "must not overlap"):
+            AudioAlignment.model_validate({
+                "alignments": [
+                    {"scene_number": 1, "start_time": 0.0, "end_time": 2.8},
+                    {"scene_number": 2, "start_time": 2.5, "end_time": 5.0},
+                ]
+            })
+
+    def test_accepts_adjacent_scene_time_ranges(self) -> None:
+        alignment = AudioAlignment.model_validate({
+            "alignments": [
+                {"scene_number": 1, "start_time": 0.0, "end_time": 2.5},
+                {"scene_number": 2, "start_time": 2.5, "end_time": 5.0},
+            ]
+        })
+        self.assertEqual(len(alignment.alignments), 2)
+
     def test_rejects_negative_non_finite_and_reversed_times(self) -> None:
         invalid_ranges = [
             (-0.1, 1.0),
