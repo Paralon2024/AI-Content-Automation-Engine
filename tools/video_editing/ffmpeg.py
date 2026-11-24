@@ -108,6 +108,15 @@ class FFmpegTool(BaseModelTool):
         """
         self._run(cmd)
 
+    @staticmethod
+    def _format_concat_file_entry(video_path: Path) -> str:
+        """Format a path for FFmpeg's concat demuxer without directive injection."""
+        path = str(video_path.absolute())
+        if "\n" in path or "\r" in path:
+            raise ValueError("Video paths used for concatenation cannot contain newlines")
+        escaped_path = path.replace("\\", "\\\\").replace("'", "\\'")
+        return f"file '{escaped_path}'\n"
+
     def concat_videos(
         self,
         video_list: List[Path],
@@ -118,8 +127,7 @@ class FFmpegTool(BaseModelTool):
             list_path = td / "files.txt"
             with open(list_path, "w", encoding="utf-8") as f:
                 for v in video_list:
-                    abs_v = v.absolute()
-                    f.write(f"file '{abs_v}'\n")
+                    f.write(self._format_concat_file_entry(v))
 
             cmd = f"""
             ffmpeg -y -f concat -safe 0 -i {shlex.quote(str(list_path))} \
