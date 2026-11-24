@@ -176,10 +176,11 @@ class MediaToolDiagnosticsTests(unittest.TestCase):
                         encoding="utf-8",
                     )
 
-                    with self.assertRaisesRegex(RuntimeError, "invalid token timestamp range"):
+                    with self.assertRaisesRegex(RuntimeError, "Invalid Whisper transcription cache"):
                         WhisperTool().generate_srt(audio_path, output_srt)
 
                     self.assertFalse(output_srt.exists())
+                    self.assertFalse(cache_path.exists())
 
     def test_empty_whisper_result_is_not_written_as_an_empty_srt(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
