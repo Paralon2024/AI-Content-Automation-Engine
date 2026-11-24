@@ -54,6 +54,38 @@ class UploadEndpointTests(unittest.TestCase):
                 ideas_router._validate_mp4(Path("fake.mp4"))
         self.assertEqual(raised.exception.status_code, 415)
 
+    def test_mp4_validator_accepts_a_valid_video_stream(self):
+        from subprocess import CompletedProcess
+
+        valid = CompletedProcess(
+            args=["ffprobe"], returncode=0,
+            stdout='{"streams": [{"codec_type": "video"}], "format": {"duration": "2.5"}}',
+            stderr="",
+        )
+        with patch.object(ideas_router.subprocess, "run", return_value=valid) as run:
+            ideas_router._validate_mp4(Path("valid.mp4"))
+        self.assertEqual(run.call_args.kwargs["timeout"], 30)
+        self.assertIn("-show_entries", run.call_args.args[0])
+
+    def test_mp4_validator_reports_missing_ffprobe_as_service_unavailable(self):
+        with patch.object(
+            ideas_router.subprocess, "run", side_effect=FileNotFoundError("ffprobe")
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                ideas_router._validate_mp4(Path("valid.mp4"))
+        self.assertEqual(raised.exception.status_code, 503)
+
+    def test_mp4_validator_reports_ffprobe_timeout_as_service_unavailable(self):
+        import subprocess
+
+        with patch.object(
+            ideas_router.subprocess, "run",
+            side_effect=subprocess.TimeoutExpired("ffprobe", 30),
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                ideas_router._validate_mp4(Path("valid.mp4"))
+        self.assertEqual(raised.exception.status_code, 503)
+
     def test_mp4_validator_rejects_zero_duration_video(self):
         from subprocess import CompletedProcess
 
