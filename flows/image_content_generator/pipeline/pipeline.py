@@ -599,12 +599,18 @@ class Pipeline(BaseModelTool):
 
             # Restore the previously published export without overwriting it.
             if backup_final is not None and backup_final.exists():
-                try:
-                    os.replace(backup_final, named_final)
-                except OSError as exc:
+                if named_final.exists():
                     rollback_errors.append(
-                        f"could not restore previous export {named_final.name}: {exc}"
+                        f"could not restore previous export {named_final.name}; "
+                        f"the new export remains at {named_final} and the backup is preserved"
                     )
+                else:
+                    try:
+                        os.replace(backup_final, named_final)
+                    except OSError as exc:
+                        rollback_errors.append(
+                            f"could not restore previous export {named_final.name}: {exc}"
+                        )
 
             if rollback_errors:
                 recovery_path = (
