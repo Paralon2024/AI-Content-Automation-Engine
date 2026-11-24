@@ -150,9 +150,13 @@ def run_in_job(job_id: str, fn: object) -> None:
 
     try:
         fn()  # type: ignore[operator]
+    except Exception as exc:
+        failed = True
+        writer.write(f"❌ Error: {type(exc).__name__}: {exc}\n")
     except BaseException as exc:
         failed = True
         writer.write(f"❌ Error: {type(exc).__name__}: {exc}\n")
+        raise
     finally:
         try:
             writer.flush()
