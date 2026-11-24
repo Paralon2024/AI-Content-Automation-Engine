@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from flows.image_content_generator.pipeline.pipeline import (
     Pipeline,
@@ -42,6 +42,60 @@ def make_script() -> VideoScript:
             "narration": "A new narration",
         }]
     })
+
+
+
+class SceneAudioValidationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        root = Path(self.temp_dir.name)
+        self.pipeline = Pipeline(
+            out_base=root / "out",
+            resource_base=root / "resources",
+            orientation=VideoOrientation.SHORT,
+        )
+        self.pipeline._ffmpeg = MagicMock()
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_rejects_missing_and_too_small_cached_scene_audio(self) -> None:
+        path = Path(self.temp_dir.name) / "scene_0001.wav"
+
+        self.assertFalse(self.pipeline._is_valid_scene_audio(path))
+        path.write_bytes(b"RIFF")
+
+        self.assertFalse(self.pipeline._is_valid_scene_audio(path))
+        self.pipeline._ffmpeg.get_audio_duration.assert_not_called()
+
+    def test_rejects_cached_audio_when_ffprobe_cannot_read_it(self) -> None:
+        path = Path(self.temp_dir.name) / "scene_0001.wav"
+        path.write_bytes(b"x" * 128)
+        self.pipeline._ffmpeg.get_audio_duration.side_effect = RuntimeError("invalid WAV")
+
+        self.assertFalse(self.pipeline._is_valid_scene_audio(path))
+
+    def test_accepts_cached_audio_only_with_usable_duration(self) -> None:
+        path = Path(self.temp_dir.name) / "scene_0001.wav"
+        path.write_bytes(b"x" * 128)
+        self.pipeline._ffmpeg.get_audio_duration.return_value = 2.4
+
+        self.assertTrue(self.pipeline._is_valid_scene_audio(path))
+
+    def test_rejects_new_segment_with_incorrect_duration(self) -> None:
+        path = Path(self.temp_dir.name) / "scene_0001.tmp.wav"
+        path.write_bytes(b"x" * 128)
+        self.pipeline._ffmpeg.get_audio_duration.return_value = 0.8
+
+        with self.assertRaisesRegex(RuntimeError, "duration mismatch"):
+            self.pipeline._validate_generated_scene_audio(path, 2.0)
+
+    def test_rejects_non_finite_cached_duration(self) -> None:
+        path = Path(self.temp_dir.name) / "scene_0001.wav"
+        path.write_bytes(b"x" * 128)
+        self.pipeline._ffmpeg.get_audio_duration.return_value = float("nan")
+
+        self.assertFalse(self.pipeline._is_valid_scene_audio(path))
 
 
 class ProjectAssetTransactionTests(unittest.TestCase):
