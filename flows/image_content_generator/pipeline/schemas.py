@@ -48,6 +48,12 @@ class AudioAlignment(BaseModel):
             raise ValueError(
                 "Audio alignments must contain each scene exactly once in sequential order"
             )
+
+        for previous, current in zip(self.alignments, self.alignments[1:]):
+            if current.start_time < previous.end_time:
+                raise ValueError(
+                    "Audio scene alignments must be chronological and must not overlap"
+                )
         return self
 
 
