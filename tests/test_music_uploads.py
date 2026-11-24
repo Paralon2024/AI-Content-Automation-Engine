@@ -110,6 +110,19 @@ class MusicUploadTests(unittest.TestCase):
         self.assertEqual(second.read_bytes(), b"old second")
         self.assertEqual(list(self.library.glob(".music-upload-*")), [])
 
+    def test_cannot_delete_music_library_root_through_dot_paths(self) -> None:
+        sentinel = self.library / "important.mp3"
+        sentinel.write_bytes(b"keep this")
+
+        for path in (".", "./"):
+            with self.subTest(path=path):
+                with self.assertRaises(HTTPException) as raised:
+                    music_router.delete_entry(path)
+
+                self.assertEqual(raised.exception.status_code, 400)
+                self.assertTrue(sentinel.is_file())
+                self.assertEqual(sentinel.read_bytes(), b"keep this")
+
     def test_rejects_path_traversal_folder(self) -> None:
         with self.assertRaises(HTTPException) as raised:
             asyncio.run(
