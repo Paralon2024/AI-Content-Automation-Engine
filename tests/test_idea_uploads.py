@@ -216,7 +216,7 @@ class UploadEndpointTests(unittest.TestCase):
         stale.write_bytes(b"stale")
         mp4 = bytes.fromhex("000000186674797069736f6d") + b"-clip"
 
-        result = with patch.object(ideas_router, "_validate_mp4"):
+        with patch.object(ideas_router, "_validate_mp4"):
             result = asyncio.run(
                 ideas_router.upload_videos(
                     1, [upload("scene.mp4", mp4)], orientation=self.orientation
