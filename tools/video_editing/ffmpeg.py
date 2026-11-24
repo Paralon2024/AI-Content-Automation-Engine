@@ -120,7 +120,9 @@ class FFmpegTool(BaseModelTool):
     @staticmethod
     def _escape_filtergraph_value(value: str) -> str:
         """Escape a path for use as an FFmpeg filtergraph option value."""
-        for char in "\\':,[];=":
+        if "\n" in value or "\r" in value:
+            raise ValueError("FFmpeg filtergraph paths cannot contain newlines")
+        for char in "\\':,[];= ":
             value = value.replace(char, "\\" + char)
         return value
 
