@@ -1,6 +1,8 @@
 import asyncio
 import io
 import json
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -41,6 +43,40 @@ def upload(name, data):
 
 
 class UploadEndpointTests(unittest.TestCase):
+    @unittest.skipUnless(
+        shutil.which("ffmpeg") and shutil.which("ffprobe"),
+        "requires ffmpeg and ffprobe (also exercised in the Docker CI image)",
+    )
+    def test_mp4_validator_accepts_a_real_generated_mp4(self):
+        with tempfile.TemporaryDirectory() as directory:
+            video_path = Path(directory) / "valid.mp4"
+            generated = subprocess.run(
+                [
+                    "ffmpeg", "-hide_banner", "-loglevel", "error",
+                    "-f", "lavfi", "-i", "color=c=black:s=64x64:r=10:d=1",
+                    "-c:v", "mpeg4", "-pix_fmt", "yuv420p", "-y",
+                    str(video_path),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(generated.returncode, 0, generated.stderr)
+            ideas_router._validate_mp4(video_path)
+
+    @unittest.skipUnless(
+        shutil.which("ffprobe"),
+        "requires ffprobe (also exercised in the Docker CI image)",
+    )
+    def test_mp4_validator_rejects_a_real_corrupt_mp4(self):
+        with tempfile.TemporaryDirectory() as directory:
+            corrupt_path = Path(directory) / "corrupt.mp4"
+            corrupt_path.write_bytes(b"this is not an MP4 container")
+            with self.assertRaises(HTTPException) as raised:
+                ideas_router._validate_mp4(corrupt_path)
+        self.assertEqual(raised.exception.status_code, 415)
+
     def test_mp4_validator_rejects_files_without_a_video_stream(self):
         from subprocess import CompletedProcess
 
