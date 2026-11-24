@@ -90,6 +90,24 @@ class JobManagerTests(unittest.IsolatedAsyncioTestCase):
         await self._collect(job_ids[1])
         await self._collect(job_ids[2])
 
+    async def test_base_exception_is_not_reported_as_success(self) -> None:
+        class FatalJobError(BaseException):
+            pass
+
+        job_id = job_manager.create_job()
+
+        def fail() -> None:
+            raise FatalJobError("fatal worker failure")
+
+        with self.assertRaisesRegex(FatalJobError, "fatal worker failure"):
+            await asyncio.to_thread(job_manager.run_in_job, job_id, fail)
+
+        await asyncio.sleep(0)
+        messages = await self._collect(job_id)
+        self.assertTrue(any("fatal worker failure" in message for message in messages))
+        self.assertEqual(messages[-1], "[FAILED]")
+        self.assertNotIn("[DONE]", messages)
+
     async def test_unknown_job_emits_failure_instead_of_hanging(self) -> None:
         messages = await self._collect("missing-job-id")
 
