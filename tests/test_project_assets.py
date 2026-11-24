@@ -246,5 +246,74 @@ class ScriptReplacementTests(unittest.TestCase):
             self.assertEqual(list(idea_dir.glob(".*.backup")), [])
 
 
+
+class FinalVideoCommitTests(unittest.TestCase):
+    def _make_pipeline(self, root: Path) -> tuple[Pipeline, Path, Path]:
+        pipeline = Pipeline(
+            out_base=root / "out",
+            resource_base=root / "resources",
+            orientation=VideoOrientation.SHORT,
+        )
+        pipeline.store.add(
+            IdeaRaw(
+                id=1,
+                title="My Final Video",
+                category="horror",
+                state=State.VIDEO_MUSIC_GENERATED,
+            )
+        )
+        idea_dir = pipeline.get_idea_path(1)
+        editions_dir = idea_dir / "editions"
+        editions_dir.mkdir(parents=True)
+        final_video = editions_dir / "final_video.mp4"
+        final_video.write_bytes(b"new final video")
+        named_final = pipeline.get_named_video_path(1, "My Final Video")
+        return pipeline, final_video, named_final
+
+    def test_metadata_failure_restores_working_video_and_previous_export(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pipeline, final_video, named_final = self._make_pipeline(Path(temp_dir))
+            named_final.write_bytes(b"previous published video")
+
+            with patch.object(
+                pipeline.store,
+                "save",
+                side_effect=OSError("simulated metadata persistence failure"),
+            ):
+                with self.assertRaisesRegex(
+                    OSError, "simulated metadata persistence failure"
+                ):
+                    pipeline.step7_rename_final_video(1)
+
+            self.assertEqual(final_video.read_bytes(), b"new final video")
+            self.assertEqual(named_final.read_bytes(), b"previous published video")
+            self.assertEqual(
+                pipeline.store.get_by_id(1).state,
+                State.VIDEO_MUSIC_GENERATED,
+            )
+            self.assertEqual(
+                list(named_final.parent.glob(f".{named_final.name}.*.backup")),
+                [],
+            )
+
+    def test_successful_commit_replaces_old_export_and_marks_project_completed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pipeline, final_video, named_final = self._make_pipeline(Path(temp_dir))
+            named_final.write_bytes(b"previous published video")
+
+            pipeline.step7_rename_final_video(1)
+
+            self.assertFalse(final_video.exists())
+            self.assertEqual(named_final.read_bytes(), b"new final video")
+            self.assertEqual(
+                pipeline.store.get_by_id(1).state,
+                State.COMPLETED,
+            )
+            self.assertEqual(
+                list(named_final.parent.glob(f".{named_final.name}.*.backup")),
+                [],
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
