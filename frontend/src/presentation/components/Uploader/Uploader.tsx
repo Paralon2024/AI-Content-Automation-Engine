@@ -32,12 +32,18 @@ export default function Uploader({
   function addFiles(incoming: FileList | null) {
     if (!incoming) return
     setUploadError(null)
-    const filtered = Array.from(incoming).filter(f =>
+    const accepted = Array.from(incoming).filter(f =>
       acceptedExts.some(ext => f.name.toLowerCase().endsWith(`.${ext}`))
     )
     setFiles(prev => {
       const names = new Set(prev.map(f => f.name))
-      return [...prev, ...filtered.filter(f => !names.has(f.name))]
+      const additions: File[] = []
+      for (const file of accepted) {
+        if (names.has(file.name)) continue
+        names.add(file.name)
+        additions.push(file)
+      }
+      return [...prev, ...additions]
     })
   }
 
@@ -94,7 +100,11 @@ export default function Uploader({
           multiple
           accept={accept}
           style={{ display: 'none' }}
-          onChange={e => addFiles(e.target.files)}
+          onChange={e => {
+            addFiles(e.target.files)
+            // Allow selecting the same file again after it has been removed.
+            e.currentTarget.value = ''
+          }}
         />
 
         {files.length === 0 ? (
