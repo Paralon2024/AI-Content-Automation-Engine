@@ -117,6 +117,13 @@ class FFmpegTool(BaseModelTool):
         escaped_path = path.replace("\\", "\\\\").replace("'", "\\'")
         return f"file '{escaped_path}'\n"
 
+    @staticmethod
+    def _escape_filtergraph_value(value: str) -> str:
+        """Escape a path for use as an FFmpeg filtergraph option value."""
+        for char in "\\':,[];=":
+            value = value.replace(char, "\\" + char)
+        return value
+
     def concat_videos(
         self,
         video_list: List[Path],
@@ -298,7 +305,7 @@ class FFmpegTool(BaseModelTool):
         Messenger.info(f"Subtitling: {width}x{height}, MarginV={margin_v}px")
 
         # Trendy style: Yellow text, black outline, Impact font
-        safe_srt = str(srt_path).replace("\\", "/").replace(":", "\\:")
+        safe_srt = self._escape_filtergraph_value(str(srt_path).replace("\\\\", "/"))
 
         # We specify PlayResX/Y so that MarginV and FontSize are in pixels relative
         # to the video's actual resolution, avoiding the 'middle of the screen' bug.
