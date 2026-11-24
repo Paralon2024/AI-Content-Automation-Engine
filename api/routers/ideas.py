@@ -314,14 +314,31 @@ async def upload_videos(
 
         idea.state = State.VIDEOS_GENERATED
         st.save(idea)
-    except Exception:
+    except Exception as original_error:
         idea.state = old_state
-        for target in installed_targets:
-            target.unlink(missing_ok=True)
+        rollback_errors: list[str] = []
+
+        for target in reversed(installed_targets):
+            try:
+                target.unlink(missing_ok=True)
+            except OSError as exc:
+                rollback_errors.append(f"could not remove {target.name}: {exc}")
+
         for backup, original in reversed(backed_up_targets):
             if backup.exists():
-                backup.replace(original)
-        # Remove backups only after every original file has been restored.
+                try:
+                    backup.replace(original)
+                except OSError as exc:
+                    rollback_errors.append(f"could not restore {original.name}: {exc}")
+
+        if rollback_errors:
+            # Keep the hidden backup directory intact for manual recovery.
+            raise RuntimeError(
+                "Scene-video upload failed and rollback was incomplete. "
+                f"Recovery files were preserved in {backup_dir}. "
+                + "; ".join(rollback_errors)
+            ) from original_error
+
         shutil.rmtree(backup_dir, ignore_errors=True)
         raise
     else:
