@@ -297,6 +297,14 @@ class Pipeline(BaseModelTool):
             return False
         return math.isfinite(duration) and duration >= 0.5
 
+    @staticmethod
+    def _validate_batch_audio_duration(audio_path: Path, duration: float) -> None:
+        """Reject invalid batch durations before trusting alignment timestamps."""
+        if not math.isfinite(duration) or duration <= 0:
+            raise RuntimeError(
+                f"Invalid batch audio duration ({duration}s): {audio_path}"
+            )
+
     def _validate_generated_scene_audio(
         self, audio_path: Path, expected_duration: float
     ) -> None:
@@ -404,6 +412,7 @@ class Pipeline(BaseModelTool):
 
             # 6. Validate and split the batch into per-scene audio files.
             chunk_duration = self.ffmpeg.get_audio_duration(chunk_audio_path)
+            self._validate_batch_audio_duration(chunk_audio_path, chunk_duration)
             validated_segments: list[tuple[int, float, float]] = []
             for al in alignment.alignments:
                 absolute_scene_num = start_idx + al.scene_number
