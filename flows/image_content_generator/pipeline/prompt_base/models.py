@@ -1,7 +1,7 @@
 import json
 from typing import Any, Dict, List, Type
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class Subject(BaseModel):
@@ -58,6 +58,16 @@ class Scene(BaseModel):
 
 class VideoScript(BaseModel):
     scenes: List[Scene]
+
+    @model_validator(mode="after")
+    def validate_scene_sequence(self) -> "VideoScript":
+        if not self.scenes:
+            raise ValueError("A video script must contain at least one scene")
+        numbers = [scene.scene_number for scene in self.scenes]
+        expected = list(range(1, len(numbers) + 1))
+        if numbers != expected:
+            raise ValueError("Script scene numbers must be sequential, starting at 1")
+        return self
 
     @classmethod
     def get_json_format_instructions(cls) -> str:

@@ -290,7 +290,7 @@ class Pipeline(BaseModelTool):
     def step3_generate_audios(self, idea_id: int, force: bool = False):
         """
         Generate Audio: Batched AI-Guided Batching (Whisper + Gemini).
-        Processes scenes in groups of 10 for maximum stability and alignment precision.
+        Processes scenes in groups of 15 for stable synthesis and alignment.
         """
         idea_obj = self.store.get_by_id(idea_id)
         if not idea_obj:
@@ -371,32 +371,40 @@ class Pipeline(BaseModelTool):
                 )
                 raise RuntimeError(error_msg)
 
-            # 6. Split and Save
-            Messenger.info(f"Splitting Batch {batch_num} into {len(chunk)} scene audios...")
+            # 6. Validate and split the batch into per-scene audio files.
+            chunk_duration = self.ffmpeg.get_audio_duration(chunk_audio_path)
+            validated_segments: list[tuple[int, float, float]] = []
             for al in alignment.alignments:
-                # al.scene_number is 1-indexed relative to the chunk (1 to 10)
                 absolute_scene_num = start_idx + al.scene_number
+                duration = al.end_time - al.start_time
+
+                if duration < 0.5:
+                    raise RuntimeError(
+                        f"Invalid duration (Scene {absolute_scene_num}): "
+                        f"{duration:.3f}s; expected at least 0.5s."
+                    )
+                if al.end_time > chunk_duration + 0.25:
+                    raise RuntimeError(
+                        f"Alignment exceeds batch audio duration for scene "
+                        f"{absolute_scene_num}: end={al.end_time:.3f}s, "
+                        f"audio={chunk_duration:.3f}s."
+                    )
+
+                validated_segments.append(
+                    (absolute_scene_num, al.start_time, duration)
+                )
+
+            Messenger.info(f"Splitting Batch {batch_num} into {len(chunk)} scene audios...")
+            for absolute_scene_num, start_time, duration in validated_segments:
                 out_path = self.get_idea_asset_path(
                     idea_obj.id,
                     self.AUDIOS_DIR,
                     self.SCENE_AUDIO_PATTERN.format(absolute_scene_num)
                 )
-
-                duration = al.end_time - al.start_time
-                if duration < 0.5:
-                    chunk_audio_path.unlink(missing_ok=True)
-                    chunk_audio_path.with_name(
-                        chunk_audio_path.name + ".json"
-                    ).unlink(missing_ok=True)
-                    raise RuntimeError(
-                        f"Invalid duration (Scene {absolute_scene_num}): "
-                        f"{duration:.3f}s. Forcing retry."
-                    )
-
                 self.ffmpeg.split_audio(
                     audio_in=chunk_audio_path,
                     audio_out=out_path,
-                    start_time=al.start_time,
+                    start_time=start_time,
                     duration=duration
                 )
 

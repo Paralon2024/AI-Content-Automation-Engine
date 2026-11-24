@@ -14,9 +14,47 @@ class FFmpegTool(BaseModelTool):
     """
 
     def _run(self, cmd: str) -> None:
-        p = subprocess.run(cmd, shell=True)
-        if p.returncode != 0:
-            raise RuntimeError(f"FFmpeg failed: {cmd}")
+        process = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if process.returncode != 0:
+            details = (process.stderr or process.stdout or "").strip()
+            if len(details) > 4000:
+                details = details[-4000:]
+            diagnostic = details or "No diagnostic output was returned."
+            raise RuntimeError(
+                f"FFmpeg failed (exit code {process.returncode}): {diagnostic}\n"
+                f"Command: {cmd}"
+            )
+
+    def _probe(self, cmd: str, description: str) -> str:
+        process = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if process.returncode != 0:
+            details = (process.stderr or process.stdout or "").strip()
+            if len(details) > 4000:
+                details = details[-4000:]
+            raise RuntimeError(
+                f"ffprobe could not read {description} "
+                f"(exit code {process.returncode}): "
+                f"{details or 'No diagnostic output was returned.'}"
+            )
+
+        output = process.stdout.strip()
+        if not output:
+            raise RuntimeError(f"ffprobe returned no value for {description}")
+        return output
 
     def split_audio(
         self,
@@ -29,9 +67,8 @@ class FFmpegTool(BaseModelTool):
         Splits an audio file into a segment starting at start_time with duration.
         """
         cmd = (
-            f"ffmpeg -y -i {shlex.quote(str(audio_in))} "
-            f"-ss {start_time} -t {duration} {shlex.quote(str(audio_out))} "
-            f"-v error"
+            f"ffmpeg -y -v error -i {shlex.quote(str(audio_in))} "
+            f"-ss {start_time} -t {duration} {shlex.quote(str(audio_out))}"
         )
         self._run(cmd)
 
@@ -81,8 +118,10 @@ class FFmpegTool(BaseModelTool):
             "-of default=noprint_wrappers=1:nokey=1"
         )
         cmd = f"{cmd_base} {shlex.quote(str(audio_path))}"
-        output = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
-        return float(output)
+        try:
+            return float(self._probe(cmd, f"audio duration for {audio_path}"))
+        except ValueError as exc:
+            raise RuntimeError(f"ffprobe returned an invalid audio duration for {audio_path}") from exc
 
     def get_video_duration(self, video_path: Path) -> float:
         """
@@ -93,8 +132,10 @@ class FFmpegTool(BaseModelTool):
             "-of default=noprint_wrappers=1:nokey=1"
         )
         cmd = f"{cmd_base} {shlex.quote(str(video_path))}"
-        output = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
-        return float(output)
+        try:
+            return float(self._probe(cmd, f"video duration for {video_path}"))
+        except ValueError as exc:
+            raise RuntimeError(f"ffprobe returned an invalid video duration for {video_path}") from exc
 
     def sync_video_and_audio(
         self,
@@ -136,8 +177,10 @@ class FFmpegTool(BaseModelTool):
             "-of default=noprint_wrappers=1:nokey=1"
         )
         cmd = f"{cmd_base} {shlex.quote(str(video_path))}"
-        output = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
-        return int(output)
+        try:
+            return int(self._probe(cmd, f"video height for {video_path}"))
+        except ValueError as exc:
+            raise RuntimeError(f"ffprobe returned an invalid video height for {video_path}") from exc
 
     def get_video_width(self, video_path: Path) -> int:
         """
@@ -148,8 +191,10 @@ class FFmpegTool(BaseModelTool):
             "-of default=noprint_wrappers=1:nokey=1"
         )
         cmd = f"{cmd_base} {shlex.quote(str(video_path))}"
-        output = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
-        return int(output)
+        try:
+            return int(self._probe(cmd, f"video width for {video_path}"))
+        except ValueError as exc:
+            raise RuntimeError(f"ffprobe returned an invalid video width for {video_path}") from exc
 
     def create_composite_scene_video(
         self,

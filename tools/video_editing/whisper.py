@@ -5,6 +5,8 @@ import subprocess
 from pathlib import Path
 from typing import ClassVar, List
 
+from pydantic import ValidationError
+
 from tools.common.base_model import BaseModelTool
 from tools.video_editing.whisper_schemas import (
     WhisperTranscription,
@@ -22,9 +24,23 @@ class WhisperTool(BaseModelTool):
     )
 
     def _run(self, cmd: str) -> None:
-        p = subprocess.run(cmd, shell=True)
-        if p.returncode != 0:
-            raise RuntimeError(f"Whisper Error: {cmd}")
+        process = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if process.returncode != 0:
+            details = (process.stderr or process.stdout or "").strip()
+            if len(details) > 4000:
+                details = details[-4000:]
+            raise RuntimeError(
+                f"Whisper failed (exit code {process.returncode}): "
+                f"{details or 'No diagnostic output was returned.'}\n"
+                f"Command: {cmd}"
+            )
 
     def _get_transcription_json(
         self,
@@ -49,12 +65,13 @@ class WhisperTool(BaseModelTool):
         with open(json_path, 'r', encoding='utf-8') as f:
             try:
                 return WhisperTranscription.model_validate(json.load(f))
-            except json.JSONDecodeError:
-                # If JSON is corrupted, delete it to ensure next run regenerates
+            except (json.JSONDecodeError, ValidationError, UnicodeDecodeError) as exc:
+                # A malformed or schema-incompatible cache must never be reused.
                 json_path.unlink(missing_ok=True)
                 raise RuntimeError(
-                    f"JSON corrupted: {json_path}. Deleted to allow retry."
-                )
+                    f"Invalid Whisper transcription cache: {json_path}. "
+                    "The cache was deleted; retry this step to regenerate it."
+                ) from exc
 
     def get_transcription_segments(
         self,
@@ -66,13 +83,25 @@ class WhisperTool(BaseModelTool):
         """
         data = self._get_transcription_json(audio_path)
         segments: List[WhisperTranscriptionSegment] = []
-        for s in data.transcription:
-            segments.append(WhisperTranscriptionSegment(
-                text=s.text.strip(),
-                start=s.offsets.from_ms / 1000.0,
-                end=s.offsets.to_ms / 1000.0
-            ))
+        for segment in data.transcription:
+            text = segment.text.strip()
+            if not text:
+                continue
+            start = segment.offsets.from_ms / 1000.0
+            end = segment.offsets.to_ms / 1000.0
+            if start < 0 or end <= start:
+                raise RuntimeError(
+                    f"Whisper returned an invalid timestamp range for {audio_path}: "
+                    f"{start:.3f}s to {end:.3f}s"
+                )
+            segments.append(
+                WhisperTranscriptionSegment(text=text, start=start, end=end)
+            )
 
+        if not segments:
+            raise RuntimeError(
+                f"Whisper returned no usable speech segments for {audio_path}"
+            )
         return segments
 
     def generate_srt(
@@ -92,6 +121,11 @@ class WhisperTool(BaseModelTool):
             for t in s.tokens
             if not t.text.startswith("[_") and t.text.strip()
         ]
+
+        if not tokens:
+            raise RuntimeError(
+                f"Whisper returned no usable words for subtitle generation: {audio_path}"
+            )
 
         words: List[WhisperWord] = []
         for t in tokens:
