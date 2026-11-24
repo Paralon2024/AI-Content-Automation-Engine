@@ -36,7 +36,7 @@ COPY pyproject.toml poetry.lock* ./
 RUN poetry install --no-root --only main
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-# Normalize Windows line endings and make the script executable.
+# Normalize Windows line endings and ensure a portable, executable entrypoint.
 RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh && \
     chmod 755 /usr/local/bin/docker-entrypoint.sh
 

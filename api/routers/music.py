@@ -1,5 +1,6 @@
 import mimetypes
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ router = APIRouter(prefix="/api/music", tags=["music"])
 _LIBRARY = Path("flows/image_content_generator/resource/bg-music").resolve()
 
 _AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".aac", ".m4a", ".flac"}
+_MAX_AUDIO_UPLOAD_BYTES = 100 * 1024 * 1024
 
 
 def _safe_path(rel: str) -> Path:
@@ -26,6 +28,8 @@ def _safe_path(rel: str) -> Path:
 def _build_tree(path: Path) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for p in sorted(path.iterdir(), key=lambda x: (x.is_file(), x.name.lower())):
+        if p.name.startswith(".music-upload-"):
+            continue
         rel = str(p.relative_to(_LIBRARY))
         if p.is_dir():
             items.append({"type": "dir", "name": p.name, "path": rel, "children": _build_tree(p)})
@@ -48,7 +52,7 @@ async def upload_tracks(
 ) -> dict[str, list[str]]:
     dest_dir = _safe_path(folder) if folder else _LIBRARY.resolve()
     dest_dir.mkdir(parents=True, exist_ok=True)
-    uploaded: list[str] = []
+
     names: list[str] = []
     for file in files:
         name = Path((file.filename or "track.mp3").replace("\\", "/")).name
@@ -56,22 +60,77 @@ async def upload_tracks(
             raise HTTPException(415, f"Unsupported audio format: {name}")
         names.append(name)
 
-    for file, name in zip(files, names):
-        dest = dest_dir / name
-        temporary = dest.with_name(dest.name + ".uploading")
-        total_size = 0
-        try:
-            with temporary.open("wb") as destination:
+    # Reject duplicate names before writing; otherwise the last copy would
+    # silently overwrite the earlier one in the same multi-file request.
+    normalized_names = [name.casefold() for name in names]
+    if len(set(normalized_names)) != len(normalized_names):
+        raise HTTPException(409, "The upload contains duplicate filenames")
+
+    staging_dir = Path(tempfile.mkdtemp(prefix=".music-upload-", dir=dest_dir))
+    staged_files: list[tuple[Path, Path]] = []
+    installed_targets: list[Path] = []
+    backups: list[tuple[Path, Path]] = []
+    cleanup_staging = True
+
+    try:
+        # Read and validate every file before replacing any existing track.
+        for index, (file, name) in enumerate(zip(files, names)):
+            staged_path = staging_dir / f"upload-{index:04d}{Path(name).suffix.lower()}"
+            total_size = 0
+            with staged_path.open("wb") as destination:
                 while chunk := await file.read(1024 * 1024):
                     total_size += len(chunk)
-                    if total_size > 100 * 1024 * 1024:
-                        raise HTTPException(413, f"Audio file is too large: {name}")
+                    if total_size > _MAX_AUDIO_UPLOAD_BYTES:
+                        raise HTTPException(
+                            413, f"Audio file is too large (100 MB maximum): {name}"
+                        )
                     destination.write(chunk)
-            temporary.replace(dest)
-        except Exception:
-            temporary.unlink(missing_ok=True)
-            raise
-        uploaded.append(str(dest.relative_to(_LIBRARY)))
+            staged_files.append((staged_path, dest_dir / name))
+
+        # Install all files as one transaction. Existing tracks are backed up
+        # inside the staging directory and restored if any replacement fails.
+        for index, (staged_path, target) in enumerate(staged_files):
+            if target.exists() and not target.is_file():
+                raise HTTPException(409, f"An item with this name is not a file: {target.name}")
+
+            if target.exists():
+                backup = staging_dir / f"backup-{index:04d}"
+                target.replace(backup)
+                backups.append((backup, target))
+
+            staged_path.replace(target)
+            installed_targets.append(target)
+
+    except Exception as original_error:
+        rollback_errors: list[str] = []
+        for target in reversed(installed_targets):
+            try:
+                target.unlink(missing_ok=True)
+            except OSError as exc:
+                rollback_errors.append(f"could not remove {target.name}: {exc}")
+
+        for backup, target in reversed(backups):
+            if backup.exists():
+                try:
+                    backup.replace(target)
+                except OSError as exc:
+                    rollback_errors.append(f"could not restore {target.name}: {exc}")
+
+        if rollback_errors:
+            # Keep the hidden staging folder, including any remaining backups,
+            # so an operator can recover the old tracks instead of losing them.
+            cleanup_staging = False
+            raise RuntimeError(
+                "Music upload failed and rollback was incomplete. "
+                f"Recovery files were preserved in {staging_dir}. "
+                + "; ".join(rollback_errors)
+            ) from original_error
+        raise
+    finally:
+        if cleanup_staging:
+            shutil.rmtree(staging_dir, ignore_errors=True)
+
+    uploaded = [str(target.relative_to(_LIBRARY)) for _, target in staged_files]
     return {"uploaded": uploaded}
 
 
@@ -98,6 +157,8 @@ def delete_entry(path: str) -> dict[str, str]:
     if not path.strip():
         raise HTTPException(400, "Cannot delete the music library root")
     target = _safe_path(path)
+    if target == _LIBRARY.resolve():
+        raise HTTPException(400, "Cannot delete the music library root")
     if not target.exists():
         raise HTTPException(404, "Not found")
     if target.is_dir():

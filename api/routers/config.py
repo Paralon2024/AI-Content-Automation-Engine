@@ -1,5 +1,6 @@
 import json
 import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -25,19 +26,31 @@ def _load() -> dict[str, Any]:
 
 
 def _save(data: dict[str, Any]) -> None:
-    temp_path = CONFIG_PATH.with_name(f"{CONFIG_PATH.name}.tmp")
+    temp_path: Path | None = None
     try:
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        temp_path.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+        with tempfile.NamedTemporaryFile(
+            mode="w",
             encoding="utf-8",
-        )
+            dir=CONFIG_PATH.parent,
+            prefix=f".{CONFIG_PATH.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary_file:
+            temporary_file.write(
+                json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+            )
+            temp_path = Path(temporary_file.name)
+
+        # Same-directory replace is atomic and unique temp names avoid write races.
         os.replace(temp_path, CONFIG_PATH)
+        temp_path = None
     except OSError as exc:
-        try:
-            temp_path.unlink(missing_ok=True)
-        except OSError:
-            pass
+        if temp_path is not None:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
         reason = exc.strerror or str(exc)
         raise HTTPException(
             status_code=500,

@@ -2,9 +2,29 @@ import { Idea, MusicNode, ScriptFormData } from './types'
 
 const BASE = '/api'
 
+async function responseError(response: Response, fallback: string): Promise<Error> {
+  const payload = await response.json().catch(() => ({})) as {
+    detail?: unknown
+    message?: unknown
+  }
+
+  let detail = typeof payload.detail === 'string' ? payload.detail : ''
+  if (Array.isArray(payload.detail)) {
+    detail = payload.detail.map((item: unknown) => {
+      if (!item || typeof item !== 'object') return ''
+      const issue = item as { loc?: unknown[]; msg?: string }
+      const location = Array.isArray(issue.loc) ? issue.loc.slice(1).join('.') : ''
+      return [location, issue.msg].filter(Boolean).join(': ')
+    }).filter(Boolean).join('; ')
+  }
+  if (!detail && typeof payload.message === 'string') detail = payload.message
+
+  return new Error(`${detail || fallback} (HTTP ${response.status})`)
+}
+
 async function get<T>(url: string): Promise<T> {
   const res = await fetch(url)
-  if (!res.ok) throw new Error(`GET ${url} failed: ${res.status}`)
+  if (!res.ok) throw await responseError(res, `GET ${url} failed`)
   return res.json() as Promise<T>
 }
 
@@ -18,7 +38,7 @@ async function post<T>(url: string, body?: unknown): Promise<T> {
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   })
-  if (!res.ok) throw new Error(`POST ${url} failed: ${res.status}`)
+  if (!res.ok) throw await responseError(res, `POST ${url} failed`)
   return res.json() as Promise<T>
 }
 
@@ -40,7 +60,7 @@ export const api = {
       const form = new FormData()
       form.append('file', file)
       const res = await fetch(`${BASE}/ideas/${ideaId}/script/upload`, { method: 'POST', body: form })
-      if (!res.ok) throw new Error('Script upload failed')
+      if (!res.ok) throw await responseError(res, 'Script upload failed')
     },
   },
 
@@ -53,7 +73,7 @@ export const api = {
     form.append('bg_volume', String(opts.bgVolume))
     form.append('music_path', opts.musicPath)
     const res = await fetch(`${BASE}/ideas/${ideaId}/assemble`, { method: 'POST', body: form })
-    if (!res.ok) throw new Error(`POST assemble failed: ${res.status}`)
+    if (!res.ok) throw await responseError(res, 'Video assembly could not be started')
     const { job_id } = await res.json() as { job_id: string }
     return job_id
   },
@@ -65,18 +85,18 @@ export const api = {
       files.forEach(f => form.append('files', f))
       if (folder) form.append('folder', folder)
       const res = await fetch(`${BASE}/music/upload`, { method: 'POST', body: form })
-      if (!res.ok) throw new Error('Music upload failed')
+      if (!res.ok) throw await responseError(res, 'Music upload failed')
     },
     createFolder: async (name: string, parent = ''): Promise<void> => {
       const form = new FormData()
       form.append('name', name)
       if (parent) form.append('parent', parent)
       const res = await fetch(`${BASE}/music/folder`, { method: 'POST', body: form })
-      if (!res.ok) throw new Error('Create folder failed')
+      if (!res.ok) throw await responseError(res, 'Could not create the folder')
     },
     delete: async (path: string): Promise<void> => {
       const res = await fetch(`${BASE}/music/${encodePath(path)}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('Delete failed')
+      if (!res.ok) throw await responseError(res, 'Could not delete the selected item')
     },
     streamUrl: (path: string) => `${BASE}/music/${encodePath(path)}/stream`,
   },

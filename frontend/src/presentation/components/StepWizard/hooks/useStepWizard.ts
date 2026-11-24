@@ -22,6 +22,7 @@ export interface StepWizardState {
   scriptMode: 'generate' | 'upload'
   setScriptMode: (m: 'generate' | 'upload') => void
   uploadingScript: boolean
+  jobError: string | null
   reuploadVideos: boolean
   setReupVideos: (v: boolean) => void
   scriptStep: ReturnType<typeof useJobStep>
@@ -52,6 +53,7 @@ export function useStepWizard(idea: Idea, onUpdate: () => void): StepWizardState
   const [showForm, setShowForm]            = useState(false)
   const [scriptMode, setScriptMode]        = useState<'generate' | 'upload'>('generate')
   const [uploadingScript, setUploadScript] = useState(false)
+  const [jobError, setJobError] = useState<string | null>(null)
   const [reuploadVideos, setReupVideos]    = useState(false)
 
   const level: PipelineLevel = LEVEL[idea.state]
@@ -62,13 +64,25 @@ export function useStepWizard(idea: Idea, onUpdate: () => void): StepWizardState
     setScriptMode('generate')
     setReupVideos(false)
     pendingMusic.current = null
+    setJobError(null)
     ;[scriptStep, audioStep, syncStep, subsStep, assemble].forEach(s => s.reset())
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idea.id])
 
   useEffect(() => {
-    const steps = [scriptStep, audioStep, syncStep, assemble]
+    const steps = [scriptStep, audioStep, syncStep, subsStep, assemble]
     for (const step of steps) {
+      if (step.failed && !step.handled.current) {
+        step.handled.current = true
+        if (!jobError) setJobError(step.logs[step.logs.length - 1] || 'The background job failed. Please retry this step.')
+        if (step === subsStep) pendingMusic.current = null
+        step.clear()
+        onUpdate()
+      }
+    }
+
+    const successfulSteps = [scriptStep, audioStep, syncStep, assemble]
+    for (const step of successfulSteps) {
       if (step.done && !step.handled.current) {
         step.handled.current = true
         step.clear()
@@ -83,43 +97,61 @@ export function useStepWizard(idea: Idea, onUpdate: () => void): StepWizardState
       if (pendingMusic.current) {
         const opts = pendingMusic.current
         pendingMusic.current = null
-        api.assemble(idea.id, opts).then(jobId => assemble.start(jobId))
+        api.assemble(idea.id, opts)
+          .then(jobId => assemble.start(jobId))
+          .catch(error => setJobError(error instanceof Error ? error.message : String(error)))
       }
     }
-  }, [scriptStep.done, audioStep.done, syncStep.done, subsStep.done, assemble.done, onUpdate, idea.id])
+  }, [scriptStep.done, scriptStep.failed, scriptStep.logs, audioStep.done, audioStep.failed, audioStep.logs, syncStep.done, syncStep.failed, syncStep.logs, subsStep.done, subsStep.failed, subsStep.logs, assemble.done, assemble.failed, assemble.logs, onUpdate, idea.id, jobError])
 
   const handleScript = useCallback(async (form: ScriptFormData) => {
     setShowForm(false)
-    const jobId = await api.script.generate(idea.id, form)
-    scriptStep.start(jobId)
+    setJobError(null)
+    try {
+      const jobId = await api.script.generate(idea.id, form)
+      scriptStep.start(jobId)
+    } catch (error) {
+      setJobError(error instanceof Error ? error.message : String(error))
+    }
   }, [idea.id, scriptStep])
 
   const handleScriptUpload = useCallback(async (file: File) => {
     setUploadScript(true)
     try {
+      setJobError(null)
       await api.script.upload(idea.id, file)
       setShowForm(false)
       onUpdate()
+    } catch (error) {
+      setJobError(error instanceof Error ? error.message : String(error))
     } finally {
       setUploadScript(false)
     }
   }, [idea.id, onUpdate])
 
   const handleAudio = useCallback(async () => {
-    audioStep.start(await api.audio(idea.id, level >= 3))
+    setJobError(null)
+    try { audioStep.start(await api.audio(idea.id, level >= 3)) }
+    catch (error) { setJobError(error instanceof Error ? error.message : String(error)) }
   }, [idea.id, audioStep, level])
 
   const handleSync = useCallback(async () => {
-    syncStep.start(await api.sync(idea.id))
+    setJobError(null)
+    try { syncStep.start(await api.sync(idea.id)) }
+    catch (error) { setJobError(error instanceof Error ? error.message : String(error)) }
   }, [idea.id, syncStep])
 
   const handleSubs = useCallback(async (opts: MusicOpts) => {
+    setJobError(null)
     pendingMusic.current = opts
-    subsStep.start(await api.subtitles(idea.id))
+    try { subsStep.start(await api.subtitles(idea.id)) }
+    catch (error) { pendingMusic.current = null; setJobError(error instanceof Error ? error.message : String(error)) }
   }, [idea.id, subsStep])
 
   const handleAssemble = useCallback(async (opts: MusicOpts) => {
-    assemble.start(await api.assemble(idea.id, opts))
+    setJobError(null)
+    try { assemble.start(await api.assemble(idea.id, opts)) }
+    catch (error) { setJobError(error instanceof Error ? error.message : String(error)) }
   }, [idea.id, assemble])
 
   const getStatus = useCallback((i: number): StepStatus => {
@@ -142,7 +174,7 @@ export function useStepWizard(idea: Idea, onUpdate: () => void): StepWizardState
     level, selected, setSelected,
     showForm, setShowForm,
     scriptMode, setScriptMode,
-    uploadingScript,
+    uploadingScript, jobError,
     reuploadVideos, setReupVideos,
     scriptStep, audioStep, syncStep, subsStep, assemble,
     handleScript, handleScriptUpload,

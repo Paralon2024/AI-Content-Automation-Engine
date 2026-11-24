@@ -1,0 +1,13 @@
+# CI starts the API directly so it can test Compose networking without
+# downloading the 466 MB Whisper model. The normal local entrypoint is unchanged.
+services:
+  backend:
+    entrypoint:
+      - python
+      - -m
+      - uvicorn
+      - api.server:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"

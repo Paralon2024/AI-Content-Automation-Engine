@@ -1,11 +1,10 @@
 import base64
-import json
 import os
-import urllib.error
-import urllib.request
+import tempfile
 from pathlib import Path
 
 from tools.common.gemini_base import GeminiBase
+from tools.common.gemini_http import post_interaction
 from tools.common.messenger import Messenger
 
 
@@ -13,6 +12,32 @@ class GeminiAudioGenerator(GeminiBase):
     tts_model: str = "gemini-3.8-flash-tts"
     voice_name: str = "Kore"
     api_url: str = "https://generativelanguage.googleapis.com/v1beta/interactions"
+
+    @staticmethod
+    def _write_wav_atomically(audio_path: Path, wav_data: bytes) -> None:
+        """Validate and atomically replace a WAV file without exposing partial output."""
+        if len(wav_data) <= 44:
+            raise RuntimeError("Gemini TTS returned an empty or truncated WAV file")
+        if not wav_data.startswith(b"RIFF") or wav_data[8:12] != b"WAVE":
+            raise RuntimeError("Gemini TTS returned invalid WAV container data")
+
+        temporary_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                dir=audio_path.parent,
+                prefix=f".{audio_path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as temporary_file:
+                temporary_path = Path(temporary_file.name)
+                temporary_file.write(wav_data)
+                temporary_file.flush()
+                os.fsync(temporary_file.fileno())
+            os.replace(temporary_path, audio_path)
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
 
     def text_to_speech(
         self,
@@ -58,26 +83,13 @@ class GeminiAudioGenerator(GeminiBase):
             },
         }
 
-        request = urllib.request.Request(
-            self.api_url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "x-goog-api-key": api_key,
-            },
-            method="POST",
+        result = post_interaction(
+            api_url=self.api_url,
+            api_key=api_key,
+            payload=payload,
+            timeout_seconds=600,
+            operation="TTS",
         )
-
-        try:
-            with urllib.request.urlopen(request, timeout=600) as response:
-                result = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            details = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(
-                f"Gemini TTS request failed (HTTP {exc.code}): {details}"
-            ) from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError(f"Could not connect to the Gemini TTS API: {exc}") from exc
 
         audio_result = None
         for step in result.get("steps", []):
@@ -109,7 +121,7 @@ class GeminiAudioGenerator(GeminiBase):
                 "Expected audio/wav; verify the response_format configuration."
             )
 
-        audio_path.write_bytes(wav_data)
+        self._write_wav_atomically(audio_path, wav_data)
 
         usage = result.get("usage") or {}
         if usage:

@@ -1,7 +1,8 @@
 from enum import Enum
+from math import isfinite
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from tools.common.storage_folder import StoreRecord
 
@@ -27,9 +28,33 @@ class SceneAlignment(BaseModel):
     start_time: float
     end_time: float
 
+    @model_validator(mode="after")
+    def validate_time_range(self) -> "SceneAlignment":
+        if not isfinite(self.start_time) or not isfinite(self.end_time):
+            raise ValueError("Scene alignment times must be finite numbers")
+        if self.start_time < 0 or self.end_time <= self.start_time:
+            raise ValueError("Scene alignment must have a non-negative start and a later end")
+        return self
+
 
 class AudioAlignment(BaseModel):
     alignments: List[SceneAlignment]
+
+    @model_validator(mode="after")
+    def validate_scene_sequence(self) -> "AudioAlignment":
+        numbers = [alignment.scene_number for alignment in self.alignments]
+        expected = list(range(1, len(numbers) + 1))
+        if numbers != expected:
+            raise ValueError(
+                "Audio alignments must contain each scene exactly once in sequential order"
+            )
+
+        for previous, current in zip(self.alignments, self.alignments[1:]):
+            if current.start_time < previous.end_time:
+                raise ValueError(
+                    "Audio scene alignments must be chronological and must not overlap"
+                )
+        return self
 
 
 class ScriptFormData(BaseModel):

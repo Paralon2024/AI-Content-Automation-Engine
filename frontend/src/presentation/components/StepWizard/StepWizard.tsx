@@ -1,4 +1,4 @@
-import { Idea } from '../../tools/types'
+import { getCategoryDisplayName, Idea } from '../../tools/types'
 import PipelineHeader, { PipelineStep } from './components/PipelineHeader/PipelineHeader'
 import { useStepWizard } from './hooks/useStepWizard'
 import ScriptStep    from './steps/ScriptStep'
@@ -69,7 +69,7 @@ export default function StepWizard({ idea, onUpdate }: Props) {
         <ProductionStep
           base={base} level={w.level}
           subsStep={w.subsStep} assembleStep={w.assemble}
-          onSubs={w.handleSubs}
+          onSubs={w.handleSubs} onAssemble={w.handleAssemble}
         />
       )
       default: return null
@@ -80,7 +80,7 @@ export default function StepWizard({ idea, onUpdate }: Props) {
     <Wizard>
       <WizardHeader>
         <WizardTitle>{idea.title || `Idea #${idea.id}`}</WizardTitle>
-        {idea.category && <WizardCategory>{idea.category}</WizardCategory>}
+        {idea.category && <WizardCategory>{getCategoryDisplayName(idea.category)}</WizardCategory>}
       </WizardHeader>
 
       <PipelineHeader
@@ -138,6 +138,12 @@ export default function StepWizard({ idea, onUpdate }: Props) {
             </>
           )}
         </StepDetailHeader>
+
+        {w.jobError && (
+          <div role="alert" style={{ color: '#d94848', margin: '12px 0', whiteSpace: 'pre-wrap' }}>
+            {w.jobError}
+          </div>
+        )}
 
         {renderStep()}
       </StepDetail>

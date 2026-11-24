@@ -5,6 +5,7 @@ export interface JobStep {
   jobId: string | null
   logs: string[]
   done: boolean
+  failed: boolean
   handled: MutableRefObject<boolean>
   start: (id: string) => void
   clear: () => void
@@ -14,7 +15,7 @@ export interface JobStep {
 export function useJobStep(): JobStep {
   const [jobId, setJobId] = useState<string | null>(null)
   const handled = useRef(false)
-  const { logs, done } = useSSE(jobId ? `/api/ideas/stream/${jobId}` : null)
+  const { logs, done, failed } = useSSE(jobId ? `/api/ideas/stream/${jobId}` : null)
 
   function start(id: string) {
     handled.current = false
@@ -30,5 +31,5 @@ export function useJobStep(): JobStep {
     setJobId(null)
   }
 
-  return { jobId, logs, done, handled, start, clear, reset }
+  return { jobId, logs, done, failed, handled, start, clear, reset }
 }

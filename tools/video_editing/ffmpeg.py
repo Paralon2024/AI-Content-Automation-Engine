@@ -1,8 +1,9 @@
+import math
 import shlex
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import List
+from typing import ClassVar, List
 
 from tools.common.base_model import BaseModelTool
 from tools.common.messenger import Messenger
@@ -13,10 +14,65 @@ class FFmpegTool(BaseModelTool):
     Tool for basic video editing operations using FFmpeg.
     """
 
+    FFMPEG_TIMEOUT_SECONDS: ClassVar[int] = 1800
+    FFPROBE_TIMEOUT_SECONDS: ClassVar[int] = 60
+
+    @staticmethod
+    def _execute(cmd: str, description: str, timeout: int) -> subprocess.CompletedProcess:
+        """Run a parsed FFmpeg command without a shell and enforce a hard timeout."""
+        args = shlex.split(cmd)
+        try:
+            return subprocess.run(
+                args,
+                shell=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            details = exc.stderr or exc.stdout or ""
+            if isinstance(details, bytes):
+                details = details.decode("utf-8", errors="replace")
+            details = details.strip()
+            if len(details) > 4000:
+                details = details[-4000:]
+            diagnostic = f" {details}" if details else ""
+            raise RuntimeError(
+                f"{description} timed out after {timeout} seconds.{diagnostic}"
+            ) from exc
+
     def _run(self, cmd: str) -> None:
-        p = subprocess.run(cmd, shell=True)
-        if p.returncode != 0:
-            raise RuntimeError(f"FFmpeg failed: {cmd}")
+        process = self._execute(cmd, "FFmpeg", self.FFMPEG_TIMEOUT_SECONDS)
+        if process.returncode != 0:
+            details = (process.stderr or process.stdout or "").strip()
+            if len(details) > 4000:
+                details = details[-4000:]
+            diagnostic = details or "No diagnostic output was returned."
+            raise RuntimeError(
+                f"FFmpeg failed (exit code {process.returncode}): {diagnostic}\\n"
+                f"Command: {cmd}"
+            )
+
+    def _probe(self, cmd: str, description: str) -> str:
+        process = self._execute(
+            cmd, f"ffprobe for {description}", self.FFPROBE_TIMEOUT_SECONDS
+        )
+        if process.returncode != 0:
+            details = (process.stderr or process.stdout or "").strip()
+            if len(details) > 4000:
+                details = details[-4000:]
+            raise RuntimeError(
+                f"ffprobe could not read {description} "
+                f"(exit code {process.returncode}): "
+                f"{details or 'No diagnostic output was returned.'}"
+            )
+
+        output = process.stdout.strip()
+        if not output:
+            raise RuntimeError(f"ffprobe returned no value for {description}")
+        return output
 
     def split_audio(
         self,
@@ -29,9 +85,8 @@ class FFmpegTool(BaseModelTool):
         Splits an audio file into a segment starting at start_time with duration.
         """
         cmd = (
-            f"ffmpeg -y -i {shlex.quote(str(audio_in))} "
-            f"-ss {start_time} -t {duration} {shlex.quote(str(audio_out))} "
-            f"-v error"
+            f"ffmpeg -y -v error -i {shlex.quote(str(audio_in))} "
+            f"-ss {start_time} -t {duration} {shlex.quote(str(audio_out))}"
         )
         self._run(cmd)
 
@@ -53,6 +108,24 @@ class FFmpegTool(BaseModelTool):
         """
         self._run(cmd)
 
+    @staticmethod
+    def _format_concat_file_entry(video_path: Path) -> str:
+        """Format a path for FFmpeg's concat demuxer without directive injection."""
+        path = str(video_path.absolute())
+        if "\n" in path or "\r" in path:
+            raise ValueError("Video paths used for concatenation cannot contain newlines")
+        escaped_path = path.replace("\\", "\\\\").replace("'", "\\'")
+        return f"file '{escaped_path}'\n"
+
+    @staticmethod
+    def _escape_filtergraph_value(value: str) -> str:
+        """Escape a path for use as an FFmpeg filtergraph option value."""
+        if "\n" in value or "\r" in value:
+            raise ValueError("FFmpeg filtergraph paths cannot contain newlines")
+        for char in "\\':,[];= ":
+            value = value.replace(char, "\\" + char)
+        return value
+
     def concat_videos(
         self,
         video_list: List[Path],
@@ -63,8 +136,7 @@ class FFmpegTool(BaseModelTool):
             list_path = td / "files.txt"
             with open(list_path, "w", encoding="utf-8") as f:
                 for v in video_list:
-                    abs_v = v.absolute()
-                    f.write(f"file '{abs_v}'\n")
+                    f.write(self._format_concat_file_entry(v))
 
             cmd = f"""
             ffmpeg -y -f concat -safe 0 -i {shlex.quote(str(list_path))} \
@@ -81,8 +153,10 @@ class FFmpegTool(BaseModelTool):
             "-of default=noprint_wrappers=1:nokey=1"
         )
         cmd = f"{cmd_base} {shlex.quote(str(audio_path))}"
-        output = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
-        return float(output)
+        try:
+            return float(self._probe(cmd, f"audio duration for {audio_path}"))
+        except ValueError as exc:
+            raise RuntimeError(f"ffprobe returned an invalid audio duration for {audio_path}") from exc
 
     def get_video_duration(self, video_path: Path) -> float:
         """
@@ -93,8 +167,10 @@ class FFmpegTool(BaseModelTool):
             "-of default=noprint_wrappers=1:nokey=1"
         )
         cmd = f"{cmd_base} {shlex.quote(str(video_path))}"
-        output = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
-        return float(output)
+        try:
+            return float(self._probe(cmd, f"video duration for {video_path}"))
+        except ValueError as exc:
+            raise RuntimeError(f"ffprobe returned an invalid video duration for {video_path}") from exc
 
     def sync_video_and_audio(
         self,
@@ -110,7 +186,9 @@ class FFmpegTool(BaseModelTool):
         audio_dur = self.get_audio_duration(audio_in)
         video_dur = self.get_video_duration(video_in)
 
-        if video_dur <= 0:
+        if not math.isfinite(audio_dur) or audio_dur <= 0:
+            raise RuntimeError(f"Invalid audio duration: {audio_dur} for {audio_in}")
+        if not math.isfinite(video_dur) or video_dur <= 0:
             raise RuntimeError(f"Invalid video duration: {video_dur} for {video_in}")
 
         # Calculate speed factor (scale) for video PTS
@@ -136,8 +214,10 @@ class FFmpegTool(BaseModelTool):
             "-of default=noprint_wrappers=1:nokey=1"
         )
         cmd = f"{cmd_base} {shlex.quote(str(video_path))}"
-        output = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
-        return int(output)
+        try:
+            return int(self._probe(cmd, f"video height for {video_path}"))
+        except ValueError as exc:
+            raise RuntimeError(f"ffprobe returned an invalid video height for {video_path}") from exc
 
     def get_video_width(self, video_path: Path) -> int:
         """
@@ -148,8 +228,10 @@ class FFmpegTool(BaseModelTool):
             "-of default=noprint_wrappers=1:nokey=1"
         )
         cmd = f"{cmd_base} {shlex.quote(str(video_path))}"
-        output = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
-        return int(output)
+        try:
+            return int(self._probe(cmd, f"video width for {video_path}"))
+        except ValueError as exc:
+            raise RuntimeError(f"ffprobe returned an invalid video width for {video_path}") from exc
 
     def create_composite_scene_video(
         self,
@@ -225,7 +307,7 @@ class FFmpegTool(BaseModelTool):
         Messenger.info(f"Subtitling: {width}x{height}, MarginV={margin_v}px")
 
         # Trendy style: Yellow text, black outline, Impact font
-        safe_srt = str(srt_path).replace("\\", "/").replace(":", "\\:")
+        safe_srt = self._escape_filtergraph_value(str(srt_path))
 
         # We specify PlayResX/Y so that MarginV and FontSize are in pixels relative
         # to the video's actual resolution, avoiding the 'middle of the screen' bug.

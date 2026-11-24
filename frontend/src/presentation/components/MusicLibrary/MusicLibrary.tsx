@@ -101,12 +101,17 @@ export default function MusicLibrary({ selected, onSelect, volume = 1 }: Props) 
   const [playing, setPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [libraryError, setLibraryError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     setNodes(await api.music.list())
   }, [])
 
-  useEffect(() => { refresh() }, [refresh])
+  useEffect(() => {
+    refresh().catch(error => {
+      setLibraryError(error instanceof Error ? error.message : 'Could not load the music library.')
+    })
+  }, [refresh])
 
   useEffect(() => {
     const audio = audioRef.current
@@ -114,7 +119,9 @@ export default function MusicLibrary({ selected, onSelect, volume = 1 }: Props) 
     if (!previewing) { audio.pause(); audio.src = ''; setPlaying(false); return }
     audio.src = api.music.streamUrl(previewing)
     audio.volume = Math.max(0, Math.min(1, volume))
-    audio.play().then(() => setPlaying(true)).catch(() => {})
+    audio.play().then(() => setPlaying(true)).catch(() => {
+      setLibraryError('Could not preview this audio track.')
+    })
   }, [previewing])
 
   useEffect(() => {
@@ -124,9 +131,12 @@ export default function MusicLibrary({ selected, onSelect, volume = 1 }: Props) 
   const uploadFiles = useCallback(async (files: File[]) => {
     if (!files.length) return
     setUploading(true)
+    setLibraryError(null)
     try {
       await api.music.upload(files)
       await refresh()
+    } catch (error) {
+      setLibraryError(error instanceof Error ? error.message : 'Music upload failed.')
     } finally {
       setUploading(false)
     }
@@ -152,10 +162,17 @@ export default function MusicLibrary({ selected, onSelect, volume = 1 }: Props) 
   const handleDelete = useCallback(async (path: string, isDir: boolean) => {
     const label = isDir ? `the folder "${path}" and its contents` : `"${path}"`
     if (!confirm(`Delete ${label}?`)) return
-    await api.music.delete(path)
-    if (selected === path) onSelect('')
-    if (previewing === path) setPreviewing('')
-    await refresh()
+    setLibraryError(null)
+    try {
+      await api.music.delete(path)
+      const isWithinDeletedFolder = (value: string) =>
+        value === path || (isDir && value.startsWith(`${path}/`))
+      if (isWithinDeletedFolder(selected)) onSelect('')
+      if (isWithinDeletedFolder(previewing)) setPreviewing('')
+      await refresh()
+    } catch (error) {
+      setLibraryError(error instanceof Error ? error.message : 'Could not delete the selected item.')
+    }
   }, [selected, previewing, onSelect, refresh])
 
   const totalTracks = countFiles(nodes)
@@ -192,6 +209,12 @@ export default function MusicLibrary({ selected, onSelect, volume = 1 }: Props) 
           onChange={handleFileInput}
         />
       </Header>
+
+      {libraryError && (
+        <p role="alert" aria-live="polite" style={{ color: '#ef4444', fontSize: 12, margin: '8px 12px' }}>
+          {libraryError}
+        </p>
+      )}
 
       {nodes.length > 0 && (
         <Tree>

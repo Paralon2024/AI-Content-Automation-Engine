@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { Idea } from '../../tools/types'
+import { getCategoryDisplayName, Idea, IdeaState } from '../../tools/types'
 import {
   IdeaListRoot, ListHeader, CollapseBtn, IdeaCount, NewBtn,
   IdeaItems, NoIdeas, IdeaItem, IdeaTitle, IdeaMeta, IdeaCategory, StateBadge,
   CollapsedStrip, CollapsedCount,
 } from './IdeaList.styled'
 
-const STATE_COLOR: Record<string, string> = {
+const STATE_COLOR: Record<IdeaState, string> = {
   NEW: '#64748b',
   SCRIPT_GENERATED: '#3b82f6',
   VIDEOS_GENERATED: '#f59e0b',
@@ -15,6 +15,17 @@ const STATE_COLOR: Record<string, string> = {
   VIDEO_SUBTITLED: '#6366f1',
   VIDEO_MUSIC_GENERATED: '#ec4899',
   COMPLETED: '#10b981',
+}
+
+const STATE_LABEL: Record<IdeaState, string> = {
+  NEW: 'New',
+  SCRIPT_GENERATED: 'Script ready',
+  VIDEOS_GENERATED: 'Scenes uploaded',
+  AUDIO_GENERATED: 'Voiceover ready',
+  VIDEO_GENERATED: 'Video assembled',
+  VIDEO_SUBTITLED: 'Subtitles added',
+  VIDEO_MUSIC_GENERATED: 'Music added',
+  COMPLETED: 'Completed',
 }
 
 interface IdeaListProps {
@@ -28,13 +39,24 @@ interface IdeaListProps {
 
 export default function IdeaList({ ideas, selectedId, isOpen, onToggle, onSelect, onCreated }: IdeaListProps) {
   const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
 
   async function handleCreate() {
+    if (creating) return
     setCreating(true)
-    const res = await fetch('/api/ideas/generate', { method: 'POST' })
-    const idea = (await res.json()) as Idea
-    setCreating(false)
-    onCreated(idea)
+    setCreateError(null)
+    try {
+      const res = await fetch('/api/ideas/generate', { method: 'POST' })
+      if (!res.ok) {
+        throw new Error(`Create request failed (HTTP ${res.status})`)
+      }
+      const idea = (await res.json()) as Idea
+      onCreated(idea)
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : 'Could not create the idea.')
+    } finally {
+      setCreating(false)
+    }
   }
 
   if (!isOpen) {
@@ -70,6 +92,12 @@ export default function IdeaList({ ideas, selectedId, isOpen, onToggle, onSelect
         </NewBtn>
       </ListHeader>
 
+      {createError && (
+        <p role="alert" style={{ color: '#ef4444', fontSize: 12, margin: '8px 12px' }}>
+          {createError}
+        </p>
+      )}
+
       <IdeaItems>
         {ideas.length === 0 && (
           <NoIdeas>No ideas yet</NoIdeas>
@@ -78,8 +106,8 @@ export default function IdeaList({ ideas, selectedId, isOpen, onToggle, onSelect
           <IdeaItem key={idea.id} $active={selectedId === idea.id} onClick={() => onSelect(idea.id)}>
             <IdeaTitle>#{idea.id} — {idea.title || 'Untitled'}</IdeaTitle>
             <IdeaMeta>
-              <IdeaCategory>{idea.category || '—'}</IdeaCategory>
-              <StateBadge $color={STATE_COLOR[idea.state] ?? '#64748b'}>{idea.state}</StateBadge>
+              <IdeaCategory>{getCategoryDisplayName(idea.category) || '—'}</IdeaCategory>
+              <StateBadge $color={STATE_COLOR[idea.state] ?? '#64748b'}>{STATE_LABEL[idea.state] ?? idea.state}</StateBadge>
             </IdeaMeta>
           </IdeaItem>
         ))}
