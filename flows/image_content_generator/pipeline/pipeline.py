@@ -1,4 +1,5 @@
 
+import math
 import os
 import shutil
 import uuid
@@ -287,6 +288,34 @@ class Pipeline(BaseModelTool):
         return script, title, form.category
 
     @preserve_audios_on_force
+    def _is_valid_scene_audio(self, audio_path: Path) -> bool:
+        """Return whether a cached scene WAV is readable and has a usable duration."""
+        if not audio_path.is_file() or audio_path.stat().st_size <= 44:
+            return False
+        try:
+            duration = self.ffmpeg.get_audio_duration(audio_path)
+        except Exception:
+            return False
+        return math.isfinite(duration) and duration >= 0.5
+
+    def _validate_generated_scene_audio(
+        self, audio_path: Path, expected_duration: float
+    ) -> None:
+        """Reject incomplete or badly clipped FFmpeg segment output."""
+        if not audio_path.is_file() or audio_path.stat().st_size <= 44:
+            raise RuntimeError(f"FFmpeg produced an empty or invalid audio segment: {audio_path}")
+        actual_duration = self.ffmpeg.get_audio_duration(audio_path)
+        if not math.isfinite(actual_duration) or actual_duration < 0.5:
+            raise RuntimeError(
+                f"FFmpeg produced an unusable audio segment ({actual_duration}s): {audio_path}"
+            )
+        tolerance = max(0.25, expected_duration * 0.05)
+        if abs(actual_duration - expected_duration) > tolerance:
+            raise RuntimeError(
+                f"Audio segment duration mismatch for {audio_path.name}: "
+                f"expected about {expected_duration:.3f}s, got {actual_duration:.3f}s."
+            )
+
     def step3_generate_audios(self, idea_id: int, force: bool = False):
         """
         Generate Audio: Batched AI-Guided Batching (Whisper + Gemini).
@@ -323,9 +352,11 @@ class Pipeline(BaseModelTool):
                 out_path = self.get_idea_asset_path(
                     idea_obj.id, self.AUDIOS_DIR, self.SCENE_AUDIO_PATTERN.format(scene_num)
                 )
-                if not out_path.exists():
+                if not self._is_valid_scene_audio(out_path):
+                    # Remove stale, truncated, or unreadable cache entries so the
+                    # containing batch is regenerated instead of silently skipped.
+                    out_path.unlink(missing_ok=True)
                     missing_any = True
-                    break
 
             if not missing_any:
                 Messenger.info(f"Skipping Batch {batch_num}: All audio files exist.")
@@ -401,12 +432,20 @@ class Pipeline(BaseModelTool):
                     self.AUDIOS_DIR,
                     self.SCENE_AUDIO_PATTERN.format(absolute_scene_num)
                 )
-                self.ffmpeg.split_audio(
-                    audio_in=chunk_audio_path,
-                    audio_out=out_path,
-                    start_time=start_time,
-                    duration=duration
+                temporary_out = out_path.with_name(
+                    f".{out_path.stem}.{uuid.uuid4().hex}.tmp.wav"
                 )
+                try:
+                    self.ffmpeg.split_audio(
+                        audio_in=chunk_audio_path,
+                        audio_out=temporary_out,
+                        start_time=start_time,
+                        duration=duration
+                    )
+                    self._validate_generated_scene_audio(temporary_out, duration)
+                    os.replace(temporary_out, out_path)
+                finally:
+                    temporary_out.unlink(missing_ok=True)
 
             # 7. Cleanup temporary batch audio and its Whisper transcription cache
             chunk_audio_path.unlink(missing_ok=True)
