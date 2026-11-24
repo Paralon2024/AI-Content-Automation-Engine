@@ -55,7 +55,7 @@ class WhisperTool(BaseModelTool):
                 details = details[-4000:]
             raise RuntimeError(
                 f"Whisper failed (exit code {process.returncode}): "
-                f"{details or 'No diagnostic output was returned.'}\\n"
+                f"{details or 'No diagnostic output was returned.'}\n"
                 f"Command: {command_display}"
             )
 
