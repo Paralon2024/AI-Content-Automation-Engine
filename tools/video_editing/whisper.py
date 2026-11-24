@@ -22,24 +22,41 @@ class WhisperTool(BaseModelTool):
     DEFAULT_MODEL: ClassVar[str] = os.getenv(
         "WHISPER_MODEL_PATH", "models/whisper/ggml-small.bin"
     )
+    TIMEOUT_SECONDS: ClassVar[int] = 900
 
-    def _run(self, cmd: str) -> None:
-        process = subprocess.run(
-            cmd,
-            shell=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
+    def _run(self, cmd: List[str]) -> None:
+        command_display = shlex.join(cmd)
+        try:
+            process = subprocess.run(
+                cmd,
+                shell=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=self.TIMEOUT_SECONDS,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            details = exc.stderr or exc.stdout or ""
+            if isinstance(details, bytes):
+                details = details.decode("utf-8", errors="replace")
+            details = str(details).strip()
+            if len(details) > 2000:
+                details = details[-2000:]
+            raise RuntimeError(
+                f"Whisper timed out after {self.TIMEOUT_SECONDS}s. "
+                f"The transcription was stopped. {details} Command: {command_display}"
+            ) from exc
+
         if process.returncode != 0:
             details = (process.stderr or process.stdout or "").strip()
             if len(details) > 4000:
                 details = details[-4000:]
             raise RuntimeError(
                 f"Whisper failed (exit code {process.returncode}): "
-                f"{details or 'No diagnostic output was returned.'}\n"
-                f"Command: {cmd}"
+                f"{details or 'No diagnostic output was returned.'}\\n"
+                f"Command: {command_display}"
             )
 
     def _get_transcription_json(
@@ -52,14 +69,13 @@ class WhisperTool(BaseModelTool):
         json_path = audio_path.with_name(audio_path.name + ".json")
         if not json_path.exists():
             # -ojf: output json full (tokens with timestamps)
-            cmd_args = [
+            cmd = [
                 "whisper-cli",
                 "-m", self.DEFAULT_MODEL,
                 "-l", "en",
                 "-ojf",
-                "-f", str(audio_path)
+                "-f", str(audio_path),
             ]
-            cmd = " ".join(shlex.quote(arg) for arg in cmd_args)
             self._run(cmd)
 
         with open(json_path, 'r', encoding='utf-8') as f:
