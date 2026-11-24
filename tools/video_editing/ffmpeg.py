@@ -305,7 +305,7 @@ class FFmpegTool(BaseModelTool):
         Messenger.info(f"Subtitling: {width}x{height}, MarginV={margin_v}px")
 
         # Trendy style: Yellow text, black outline, Impact font
-        safe_srt = self._escape_filtergraph_value(str(srt_path).replace("\\\\", "/"))
+        safe_srt = self._escape_filtergraph_value(str(srt_path))
 
         # We specify PlayResX/Y so that MarginV and FontSize are in pixels relative
         # to the video's actual resolution, avoiding the 'middle of the screen' bug.
