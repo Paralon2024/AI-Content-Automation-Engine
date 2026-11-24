@@ -567,14 +567,68 @@ class Pipeline(BaseModelTool):
         if not final_video.is_file():
             raise FileNotFoundError(f"Final video with music not found: {final_video}")
 
-        # 3. Renames the final video.
+        # 3. Commit the final export and metadata as one recoverable operation.
         video_title = idea_obj.title if idea_obj.title else f"video_{idea_obj.id}"
         named_final = self.get_named_video_path(idea_obj.id, video_title)
-        # os.replace works consistently on Windows and POSIX when regenerating
-        # a completed idea whose previous final video already exists.
-        os.replace(final_video, named_final)
+        old_state = idea_obj.state
+        backup_final: Path | None = None
+
+        # Preserve an existing export until the replacement and metadata commit.
+        if named_final.exists():
+            backup_final = named_final.with_name(
+                f".{named_final.name}.{uuid.uuid4().hex}.backup"
+            )
+            os.replace(named_final, backup_final)
+
+        try:
+            os.replace(final_video, named_final)
+            idea_obj.state = State.COMPLETED
+            self.store.save(idea_obj)
+        except Exception as original_error:
+            idea_obj.state = old_state
+            rollback_errors: list[str] = []
+
+            # Put the new export back where the pipeline expects it for retries.
+            if named_final.exists():
+                try:
+                    os.replace(named_final, final_video)
+                except OSError as exc:
+                    rollback_errors.append(
+                        f"could not restore working final video {final_video.name}: {exc}"
+                    )
+
+            # Restore the previously published export without overwriting it.
+            if backup_final is not None and backup_final.exists():
+                try:
+                    os.replace(backup_final, named_final)
+                except OSError as exc:
+                    rollback_errors.append(
+                        f"could not restore previous export {named_final.name}: {exc}"
+                    )
+
+            if rollback_errors:
+                recovery_path = (
+                    f" Recovery backup: {backup_final}."
+                    if backup_final is not None and backup_final.exists()
+                    else ""
+                )
+                raise RuntimeError(
+                    "Final video commit failed and rollback was incomplete."
+                    + recovery_path
+                    + " "
+                    + "; ".join(rollback_errors)
+                ) from original_error
+            raise
+        else:
+            if backup_final is not None and backup_final.exists():
+                try:
+                    backup_final.unlink()
+                except OSError:
+                    # The new export is committed; retain the old hidden backup
+                    # rather than reporting a failed job after successful commit.
+                    Messenger.info(
+                        f"Previous export backup retained for manual cleanup: {backup_final}"
+                    )
 
         # 4. Updates state.
-        idea_obj.state = State.COMPLETED
-        self.store.save(idea_obj)
         Messenger.success(f"Step 7 ready: {State.COMPLETED} finalized.\n")
