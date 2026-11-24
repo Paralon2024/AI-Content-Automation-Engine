@@ -155,6 +155,32 @@ class MediaToolDiagnosticsTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "no usable speech segments"):
                 WhisperTool().get_transcription_segments(audio_path)
 
+    def test_invalid_whisper_token_timestamps_are_rejected_before_srt_write(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            for index, offsets in enumerate(({"from": -1, "to": 100}, {"from": 100, "to": 100})):
+                with self.subTest(offsets=offsets):
+                    audio_path = Path(temp_dir) / f"scene_{index}.wav"
+                    cache_path = audio_path.with_name(audio_path.name + ".json")
+                    output_srt = Path(temp_dir) / f"scene_{index}.srt"
+                    cache_path.write_text(
+                        json.dumps({
+                            "transcription": [{
+                                "text": "hello",
+                                "offsets": {"from": 0, "to": 1000},
+                                "tokens": [{
+                                    "text": " hello",
+                                    "offsets": offsets,
+                                }],
+                            }]
+                        }),
+                        encoding="utf-8",
+                    )
+
+                    with self.assertRaisesRegex(RuntimeError, "invalid token timestamp range"):
+                        WhisperTool().generate_srt(audio_path, output_srt)
+
+                    self.assertFalse(output_srt.exists())
+
     def test_empty_whisper_result_is_not_written_as_an_empty_srt(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             audio_path = Path(temp_dir) / "scene.wav"
