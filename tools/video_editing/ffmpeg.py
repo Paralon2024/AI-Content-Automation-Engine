@@ -3,7 +3,7 @@ import shlex
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import List
+from typing import ClassVar, List
 
 from tools.common.base_model import BaseModelTool
 from tools.common.messenger import Messenger
@@ -14,8 +14,8 @@ class FFmpegTool(BaseModelTool):
     Tool for basic video editing operations using FFmpeg.
     """
 
-    FFMPEG_TIMEOUT_SECONDS = 1800
-    FFPROBE_TIMEOUT_SECONDS = 60
+    FFMPEG_TIMEOUT_SECONDS: ClassVar[int] = 1800
+    FFPROBE_TIMEOUT_SECONDS: ClassVar[int] = 60
 
     @staticmethod
     def _execute(cmd: str, description: str, timeout: int) -> subprocess.CompletedProcess:
