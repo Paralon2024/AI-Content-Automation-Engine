@@ -33,6 +33,16 @@ class MediaToolDiagnosticsTests(unittest.TestCase):
         )
         self.assertEqual(entry, "file '/tmp/video\\'s\\\\final.mp4'\n")
 
+    def test_subtitle_filter_path_escapes_spaces(self) -> None:
+        self.assertEqual(
+            FFmpegTool._escape_filtergraph_value("/tmp/my video/final cut.srt"),
+            "/tmp/my\\ video/final\\ cut.srt",
+        )
+
+    def test_subtitle_filter_path_rejects_newlines(self) -> None:
+        with self.assertRaisesRegex(ValueError, "cannot contain newlines"):
+            FFmpegTool._escape_filtergraph_value("/tmp/subtitles.srt\nforce_style=bad")
+
     def test_subtitle_filter_path_escapes_filtergraph_syntax(self) -> None:
         escaped = FFmpegTool._escape_filtergraph_value(
             "C:/media/it's, [final];a=b.srt"
