@@ -7,8 +7,10 @@ from typing import AsyncGenerator, Dict, TextIO
 
 _jobs: Dict[str, asyncio.Queue[str]] = {}
 _job_states: OrderedDict[str, str] = OrderedDict()
+_completed_jobs: OrderedDict[str, None] = OrderedDict()
 _MAX_RETAINED_JOB_STATES = 500
 _MAX_QUEUED_LOG_LINES = 1000
+_MAX_RETAINED_COMPLETED_LOGS = 50
 _loop: asyncio.AbstractEventLoop | None = None
 
 _DONE = "__DONE__"
@@ -182,7 +184,15 @@ def run_in_job(job_id: str, fn: object) -> None:
                         q.put_nowait(terminal)
                     except asyncio.QueueFull:
                         pass
-                    _jobs.pop(job_id, None)
+
+                    # Keep completed logs briefly so a fast job can finish before
+                    # the browser opens its SSE connection. Eviction is bounded.
+                    with _job_states_lock:
+                        _completed_jobs[job_id] = None
+                        _completed_jobs.move_to_end(job_id)
+                        while len(_completed_jobs) > _MAX_RETAINED_COMPLETED_LOGS:
+                            expired_job_id, _ = _completed_jobs.popitem(last=False)
+                            _jobs.pop(expired_job_id, None)
 
             try:
                 _loop.call_soon_threadsafe(finalize)
@@ -210,10 +220,13 @@ async def stream_job(job_id: str) -> AsyncGenerator[str, None]:
             # comment, so EventSource does not dispatch it as an application log.
             yield ": keep-alive"
             continue
-        if msg == _DONE:
-            yield "[DONE]"
-            return
-        if msg == "__FAILED__":
-            yield "[FAILED]"
+        if msg == _DONE or msg == "__FAILED__":
+            # The first stream to consume the terminal event releases the queue.
+            # The terminal state remains available for later reconnects.
+            if _jobs.get(job_id) is q:
+                _jobs.pop(job_id, None)
+            with _job_states_lock:
+                _completed_jobs.pop(job_id, None)
+            yield "[DONE]" if msg == _DONE else "[FAILED]"
             return
         yield msg
