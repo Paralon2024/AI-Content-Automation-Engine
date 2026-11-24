@@ -1,8 +1,9 @@
 import asyncio
 import sys
+import threading
 import uuid
 from collections import OrderedDict
-from typing import AsyncGenerator, Dict
+from typing import AsyncGenerator, Dict, TextIO
 
 _jobs: Dict[str, asyncio.Queue[str]] = {}
 _job_states: OrderedDict[str, str] = OrderedDict()
@@ -11,17 +12,81 @@ _MAX_QUEUED_LOG_LINES = 1000
 _loop: asyncio.AbstractEventLoop | None = None
 
 _DONE = "__DONE__"
+_job_states_lock = threading.Lock()
+_stream_lock = threading.RLock()
+
+
+class ThreadLocalStream:
+    """Route writes from a job's thread to its writer; pass other threads through."""
+
+    def __init__(self, fallback: TextIO) -> None:
+        self._fallback = fallback
+        self._local = threading.local()
+
+    def _target(self) -> TextIO:
+        return getattr(self._local, "target", self._fallback)
+
+    def bind(self, target: TextIO) -> TextIO | None:
+        previous = getattr(self._local, "target", None)
+        self._local.target = target
+        return previous
+
+    def restore(self, previous: TextIO | None) -> None:
+        if previous is None:
+            if hasattr(self._local, "target"):
+                del self._local.target
+        else:
+            self._local.target = previous
+
+    def write(self, value: str) -> int:
+        return self._target().write(value)
+
+    def flush(self) -> None:
+        self._target().flush()
+
+    def __getattr__(self, name: str):
+        target = self._target()
+        try:
+            return getattr(target, name)
+        except AttributeError:
+            return getattr(self._fallback, name)
+
+
+_stdout_dispatcher: ThreadLocalStream | None = None
+_stderr_dispatcher: ThreadLocalStream | None = None
+
+
+def _ensure_stream_dispatchers() -> tuple[ThreadLocalStream, ThreadLocalStream]:
+    """Install transparent process streams that route job output by thread."""
+    global _stdout_dispatcher, _stderr_dispatcher
+
+    with _stream_lock:
+        if isinstance(sys.stdout, ThreadLocalStream):
+            _stdout_dispatcher = sys.stdout
+        else:
+            _stdout_dispatcher = ThreadLocalStream(sys.stdout)
+            sys.stdout = _stdout_dispatcher  # type: ignore[assignment]
+
+        if isinstance(sys.stderr, ThreadLocalStream):
+            _stderr_dispatcher = sys.stderr
+        else:
+            _stderr_dispatcher = ThreadLocalStream(sys.stderr)
+            sys.stderr = _stderr_dispatcher  # type: ignore[assignment]
+
+        return _stdout_dispatcher, _stderr_dispatcher
 
 
 def register_loop(loop: asyncio.AbstractEventLoop) -> None:
     global _loop
     _loop = loop
+    _ensure_stream_dispatchers()
 
 
 def create_job() -> str:
     job_id = str(uuid.uuid4())
     _jobs[job_id] = asyncio.Queue(maxsize=_MAX_QUEUED_LOG_LINES)
-    _job_states[job_id] = "running"
+    with _job_states_lock:
+        _job_states[job_id] = "running"
     return job_id
 
 
@@ -45,7 +110,11 @@ def _put(job_id: str, msg: str) -> None:
         except asyncio.QueueFull:
             pass
 
-    _loop.call_soon_threadsafe(enqueue)
+    try:
+        _loop.call_soon_threadsafe(enqueue)
+    except RuntimeError:
+        # The application is shutting down and its event loop is already closed.
+        return
 
 
 class JobWriter:
@@ -55,12 +124,13 @@ class JobWriter:
         self._job_id = job_id
         self._buf = ""
 
-    def write(self, text: str) -> None:
+    def write(self, text: str) -> int:
         self._buf += text
         while "\n" in self._buf:
             line, self._buf = self._buf.split("\n", 1)
             if line:
                 _put(self._job_id, line)
+        return len(text)
 
     def flush(self) -> None:
         if self._buf.strip():
@@ -69,25 +139,31 @@ class JobWriter:
 
 
 def run_in_job(job_id: str, fn: object) -> None:
-    """Run fn() in the current thread, capturing stdout → job queue."""
+    """Run fn() while capturing only this worker thread's stdout and stderr."""
+    stdout_stream, stderr_stream = _ensure_stream_dispatchers()
     writer = JobWriter(job_id)
-    old_out, old_err = sys.stdout, sys.stderr
-    sys.stdout = writer  # type: ignore[assignment]
-    sys.stderr = writer  # type: ignore[assignment]
+    previous_out = stdout_stream.bind(writer)
+    previous_err = stderr_stream.bind(writer)
     failed = False
+
     try:
         fn()  # type: ignore[operator]
     except Exception as exc:
         failed = True
         writer.write(f"❌ Error: {type(exc).__name__}: {exc}\n")
     finally:
-        writer.flush()
-        sys.stdout = old_out
-        sys.stderr = old_err
-        _job_states[job_id] = "failed" if failed else "completed"
-        _job_states.move_to_end(job_id)
-        while len(_job_states) > _MAX_RETAINED_JOB_STATES:
-            _job_states.popitem(last=False)
+        try:
+            writer.flush()
+        finally:
+            stderr_stream.restore(previous_err)
+            stdout_stream.restore(previous_out)
+
+        with _job_states_lock:
+            _job_states[job_id] = "failed" if failed else "completed"
+            _job_states.move_to_end(job_id)
+            while len(_job_states) > _MAX_RETAINED_JOB_STATES:
+                _job_states.popitem(last=False)
+
         terminal = "__FAILED__" if failed else _DONE
 
         # Enqueue the terminal event before dropping the queue from the registry.
@@ -108,7 +184,10 @@ def run_in_job(job_id: str, fn: object) -> None:
                         pass
                     _jobs.pop(job_id, None)
 
-            _loop.call_soon_threadsafe(finalize)
+            try:
+                _loop.call_soon_threadsafe(finalize)
+            except RuntimeError:
+                return
 
 
 async def stream_job(job_id: str) -> AsyncGenerator[str, None]:
@@ -116,7 +195,8 @@ async def stream_job(job_id: str) -> AsyncGenerator[str, None]:
     if q is None:
         # A client may reconnect after the terminal event was consumed.
         # Retain a bounded terminal status so it can still learn the outcome.
-        state = _job_states.get(job_id)
+        with _job_states_lock:
+            state = _job_states.get(job_id)
         if state == "completed":
             yield "[DONE]"
         elif state == "failed":
