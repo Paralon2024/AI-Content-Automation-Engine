@@ -35,7 +35,7 @@ class MusicUploadTests(unittest.TestCase):
                 [
                     upload("existing.mp3", b"new content"),
                     upload("ambient.wav", b"wave content"),
-                ]
+                ], folder=""
             )
         )
 
@@ -54,7 +54,7 @@ class MusicUploadTests(unittest.TestCase):
                     [
                         upload("same.mp3", b"first"),
                         upload("SAME.MP3", b"second"),
-                    ]
+                    ], folder=""
                 )
             )
 
@@ -73,7 +73,7 @@ class MusicUploadTests(unittest.TestCase):
                         [
                             upload("new.mp3", b"ok"),
                             upload("too-large.wav", b"four"),
-                        ]
+                        ], folder=""
                     )
                 )
 
@@ -102,7 +102,7 @@ class MusicUploadTests(unittest.TestCase):
                         [
                             upload("first.mp3", b"new first"),
                             upload("second.wav", b"new second"),
-                        ]
+                        ], folder=""
                     )
                 )
 
