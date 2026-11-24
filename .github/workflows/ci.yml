@@ -87,6 +87,9 @@ jobs:
       - name: Start both services and wait for backend health
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up --detach --wait --wait-timeout 180
 
+      - name: Run backend tests inside the runtime image
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend python -m unittest discover -s tests -v
+
       - name: Verify frontend-to-backend DNS and HTTP connectivity
         run: |
           docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T frontend node -e 'const dns = require("node:dns").promises; (async () => { const result = await dns.lookup("backend"); console.log("Backend DNS:", result.address); const response = await fetch("http://backend:8000/api/health"); if (!response.ok) throw new Error("Backend health endpoint returned HTTP " + response.status); const body = await response.json(); if (body.status !== "ok") throw new Error("Unexpected backend health response: " + JSON.stringify(body)); console.log("Backend health:", body.status); })().catch(error => { console.error(error); process.exit(1); });'
