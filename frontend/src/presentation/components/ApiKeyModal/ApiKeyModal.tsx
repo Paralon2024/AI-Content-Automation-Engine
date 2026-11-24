@@ -160,13 +160,17 @@ export default function ApiKeyModal({ onClose }: Props) {
   const [value, setValue] = useState('')
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<'idle' | 'ok' | 'err'>('idle')
+  const [errorMessage, setErrorMessage] = useState('')
   const [configured, setConfigured] = useState(false)
   const [source, setSource] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetch('/api/config/gemini-key')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(`Backend returned HTTP ${r.status}`)
+        return r.json()
+      })
       .then(d => {
         setConfigured(d.configured)
         setSource(d.source)
@@ -176,28 +180,36 @@ export default function ApiKeyModal({ onClose }: Props) {
   }, [])
 
   async function handleSave() {
-    if (!value.trim()) return
+    if (!value.trim() || saving) return
     setSaving(true)
     setStatus('idle')
+    setErrorMessage('')
+
     try {
       const res = await fetch('/api/config/gemini-key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: value.trim() }),
       })
-      if (res.ok) {
-        setStatus('ok')
-        setConfigured(true)
-        setSource('file')
-        setValue('')
-        setTimeout(onClose, 1200)
-      } else {
-        setStatus('err')
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.detail || `Backend returned HTTP ${res.status}`)
       }
-    } catch {
+      if (data.ok !== true) {
+        throw new Error('Backend did not confirm that the key was saved')
+      }
+
+      setStatus('ok')
+      setConfigured(true)
+      setSource('file')
+      setValue('')
+      window.setTimeout(onClose, 1200)
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unknown save error')
       setStatus('err')
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   return (
@@ -231,7 +243,11 @@ export default function ApiKeyModal({ onClose }: Props) {
         </InputRow>
 
         <Status $ok={status === 'ok'} $err={status === 'err'}>
-          {status === 'ok' ? '✓ Key saved successfully' : status === 'err' ? '✗ Error saving the key' : ' '}
+          {status === 'ok'
+            ? '✓ Key saved successfully'
+            : status === 'err'
+              ? `✗ ${errorMessage || 'Error saving the key'}`
+              : ' '}
         </Status>
 
         <Footer>

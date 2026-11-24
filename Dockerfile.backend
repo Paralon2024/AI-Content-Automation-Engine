@@ -9,23 +9,20 @@ RUN git clone --depth 1 https://github.com/ggerganov/whisper.cpp /tmp/whisper &&
     cmake -S /tmp/whisper -B /tmp/whisper/build \
           -DCMAKE_BUILD_TYPE=Release \
           -DGGML_NATIVE=OFF \
-          -DBUILD_SHARED_LIBS=OFF \
-    cmake --build /tmp/whisper/build --config Release -j$(nproc)
+          -DBUILD_SHARED_LIBS=OFF && \
+    cmake --build /tmp/whisper/build --config Release -j"$(nproc)"
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 FROM python:3.12-slim
 
-# System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg curl \
+    ffmpeg curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the Whisper binary from the build stage
 COPY --from=whisper-builder /tmp/whisper/build/bin/whisper-cli /usr/local/bin/whisper-cli
 
 ENV WHISPER_MODEL_PATH=/opt/whisper/ggml-small.bin
 
-# Poetry
 ENV POETRY_VERSION=1.8.3 \
     POETRY_VIRTUALENVS_CREATE=false \
     POETRY_NO_INTERACTION=1 \
@@ -35,13 +32,13 @@ RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
 
 WORKDIR /app
 
-# Install dependencies first to improve Docker layer caching
 COPY pyproject.toml poetry.lock* ./
 RUN poetry install --no-root --only main
 
-# Entrypoint: download the Whisper model if missing, then start the API server
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+# Normalize Windows line endings and make the script executable.
+RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh && \
+    chmod 755 /usr/local/bin/docker-entrypoint.sh
 
-ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["uvicorn", "api.server:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["uvicorn", "api.server:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,45 +1,68 @@
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 router = APIRouter(prefix="/api/config", tags=["config"])
 
-CONFIG_PATH = Path(__file__).parent.parent.parent / "config.json"
+# Stored beside the project files. In Docker, the /app bind mount makes this
+# file persistent on the host and keeps the key out of environment variables.
+CONFIG_PATH = Path(__file__).resolve().parents[2] / "config.json"
 
 
-def _load() -> dict[str, str]:
-    if CONFIG_PATH.exists():
+def _load() -> dict[str, Any]:
+    if not CONFIG_PATH.exists():
+        return {}
+    try:
+        parsed = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        return parsed if isinstance(parsed, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        # A damaged config file should not prevent the user from saving a new key.
+        return {}
+
+
+def _save(data: dict[str, Any]) -> None:
+    temp_path = CONFIG_PATH.with_name(f"{CONFIG_PATH.name}.tmp")
+    try:
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        temp_path.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temp_path, CONFIG_PATH)
+    except OSError as exc:
         try:
-            return dict(json.loads(CONFIG_PATH.read_text()))
-        except Exception:
-            return {}
-    return {}
-
-
-def _save(data: dict[str, str]) -> None:
-    CONFIG_PATH.write_text(json.dumps(data, indent=2))
+            temp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        reason = exc.strerror or str(exc)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Cannot write {CONFIG_PATH.name}: {reason}",
+        ) from exc
 
 
 def get_gemini_key() -> str | None:
     env_key = os.getenv("GEMINI_API_KEY")
     if env_key:
         return env_key
-    return _load().get("gemini_api_key")
+    value = _load().get("gemini_api_key")
+    return value if isinstance(value, str) and value else None
 
 
 class KeyPayload(BaseModel):
-    key: str
+    model_config = ConfigDict(str_strip_whitespace=True)
+    key: str = Field(min_length=1)
 
 
 @router.get("/gemini-key")
 def check_gemini_key() -> dict[str, str | bool | None]:
     key = get_gemini_key()
-    source: str | None
     if os.getenv("GEMINI_API_KEY"):
-        source = "env"
+        source: str | None = "env"
     elif key:
         source = "file"
     else:
@@ -49,12 +72,16 @@ def check_gemini_key() -> dict[str, str | bool | None]:
 
 @router.post("/gemini-key")
 def set_gemini_key(payload: KeyPayload) -> dict[str, bool]:
-    if not payload.key.strip():
+    key = payload.key.strip()
+    if not key:
         raise HTTPException(status_code=400, detail="Key cannot be empty")
+
     data = _load()
-    data["gemini_api_key"] = payload.key.strip()
+    data["gemini_api_key"] = key
     _save(data)
-    os.environ["GEMINI_API_KEY"] = payload.key.strip()
+
+    # GeminiBase reads this value when a client is created.
+    os.environ["GEMINI_API_KEY"] = key
     return {"ok": True}
 
 
