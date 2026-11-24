@@ -27,6 +27,53 @@ class MediaToolDiagnosticsTests(unittest.TestCase):
         self.assertTrue(run.call_args.kwargs["capture_output"])
         self.assertTrue(run.call_args.kwargs["text"])
 
+    def test_ffmpeg_runs_without_a_shell_and_uses_timeout(self) -> None:
+        process = CompletedProcess(
+            args=["ffmpeg", "-version"], returncode=0, stdout="ok", stderr=""
+        )
+        with patch(
+            "tools.video_editing.ffmpeg.subprocess.run",
+            return_value=process,
+        ) as run:
+            FFmpegTool()._run("ffmpeg -version")
+
+        self.assertFalse(run.call_args.kwargs["shell"])
+        self.assertEqual(
+            run.call_args.kwargs["timeout"], FFmpegTool.FFMPEG_TIMEOUT_SECONDS
+        )
+        self.assertEqual(run.call_args.args[0], ["ffmpeg", "-version"])
+
+    def test_ffmpeg_timeout_raises_actionable_error(self) -> None:
+        from subprocess import TimeoutExpired
+
+        with patch(
+            "tools.video_editing.ffmpeg.subprocess.run",
+            side_effect=TimeoutExpired(
+                cmd=["ffmpeg", "-i", "input.mp4"], timeout=1800,
+                stderr="processing stalled",
+            ),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError, "FFmpeg timed out after 1800 seconds.*processing stalled"
+            ):
+                FFmpegTool()._run("ffmpeg -i input.mp4 output.mp4")
+
+    def test_ffprobe_uses_shorter_timeout(self) -> None:
+        process = CompletedProcess(
+            args=["ffprobe", "-version"], returncode=0, stdout="1.0", stderr=""
+        )
+        with patch(
+            "tools.video_editing.ffmpeg.subprocess.run",
+            return_value=process,
+        ) as run:
+            output = FFmpegTool()._probe("ffprobe -version", "test media")
+
+        self.assertEqual(output, "1.0")
+        self.assertFalse(run.call_args.kwargs["shell"])
+        self.assertEqual(
+            run.call_args.kwargs["timeout"], FFmpegTool.FFPROBE_TIMEOUT_SECONDS
+        )
+
     def test_ffprobe_failure_includes_captured_stderr(self) -> None:
         process = CompletedProcess(
             args="ffprobe",
