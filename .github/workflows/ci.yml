@@ -82,7 +82,7 @@ jobs:
 
       - name: Smoke-test the backend entrypoint
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm --no-deps --entrypoint /bin/sh backend -c 'mkdir -p /opt/whisper && printf test > /opt/whisper/ggml-small.bin && /usr/local/bin/docker-entrypoint.sh sh -c "echo Entrypoint smoke test passed"'
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm --no-deps --entrypoint /bin/sh backend -c 'command -v whisper-cli && whisper-cli --help >/dev/null && mkdir -p /opt/whisper && printf test > /opt/whisper/ggml-small.bin && /usr/local/bin/docker-entrypoint.sh sh -c "echo Entrypoint and Whisper CLI smoke tests passed"'
 
       - name: Start both services and wait for backend health
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up --detach --wait --wait-timeout 180
