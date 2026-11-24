@@ -1,4 +1,4 @@
-import { Idea } from '../../tools/types'
+import { getCategoryDisplayName, Idea } from '../../tools/types'
 import PipelineHeader, { PipelineStep } from './components/PipelineHeader/PipelineHeader'
 import { useStepWizard } from './hooks/useStepWizard'
 import ScriptStep    from './steps/ScriptStep'
@@ -80,7 +80,7 @@ export default function StepWizard({ idea, onUpdate }: Props) {
     <Wizard>
       <WizardHeader>
         <WizardTitle>{idea.title || `Idea #${idea.id}`}</WizardTitle>
-        {idea.category && <WizardCategory>{idea.category}</WizardCategory>}
+        {idea.category && <WizardCategory>{getCategoryDisplayName(idea.category)}</WizardCategory>}
       </WizardHeader>
 
       <PipelineHeader

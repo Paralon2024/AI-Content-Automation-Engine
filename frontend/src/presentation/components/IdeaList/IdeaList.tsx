@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Idea } from '../../tools/types'
+import { getCategoryDisplayName, Idea } from '../../tools/types'
 import {
   IdeaListRoot, ListHeader, CollapseBtn, IdeaCount, NewBtn,
   IdeaItems, NoIdeas, IdeaItem, IdeaTitle, IdeaMeta, IdeaCategory, StateBadge,
@@ -78,7 +78,7 @@ export default function IdeaList({ ideas, selectedId, isOpen, onToggle, onSelect
           <IdeaItem key={idea.id} $active={selectedId === idea.id} onClick={() => onSelect(idea.id)}>
             <IdeaTitle>#{idea.id} — {idea.title || 'Untitled'}</IdeaTitle>
             <IdeaMeta>
-              <IdeaCategory>{idea.category || '—'}</IdeaCategory>
+              <IdeaCategory>{getCategoryDisplayName(idea.category) || '—'}</IdeaCategory>
               <StateBadge $color={STATE_COLOR[idea.state] ?? '#64748b'}>{idea.state}</StateBadge>
             </IdeaMeta>
           </IdeaItem>

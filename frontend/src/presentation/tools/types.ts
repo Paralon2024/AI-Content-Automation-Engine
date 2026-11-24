@@ -14,6 +14,19 @@ export const DEFAULT_FORM: ScriptFormData = {
   aspect_ratio: '9:16',
 }
 
+const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
+  finanzas: 'Finance',
+  horror: 'Horror / Thriller',
+  motivacion: 'Motivation',
+  historia: 'History / Documentary',
+  ciencia: 'Science / Technology',
+}
+
+// Keep legacy category IDs for saved projects while presenting English labels.
+export function getCategoryDisplayName(category: string): string {
+  return CATEGORY_DISPLAY_NAMES[category] ?? category
+}
+
 export type IdeaState =
   | 'NEW'
   | 'SCRIPT_GENERATED'

@@ -33,14 +33,14 @@ export default function VideoSequence({ baseUrl, synced, sectionLabel }: Props) 
     el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }
 
-  const label = sectionLabel ?? (synced ? 'Videos sincronizados' : 'Videos')
+  const label = sectionLabel ?? (synced ? 'Synced videos' : 'Videos')
 
   if (loading) return null
   if (!files.length) return <EmptyState>No video files found</EmptyState>
 
   return (
     <Wrap>
-      {label && <SectionLabel>{label} — {files.length} escenas</SectionLabel>}
+      {label && <SectionLabel>{label} — {files.length} scenes</SectionLabel>}
       <Layout>
         <Filmstrip ref={filmstripRef}>
           {files.map((name, i) => (

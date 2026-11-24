@@ -37,7 +37,7 @@ export default function ProductionStep({ base, level, subsStep, assembleStep, on
       : `${base}/editions/raw_video.mp4`
 
   const videoLabel = level >= 7
-    ? 'Video final'
+    ? 'Final video'
     : level >= 5
       ? 'Video with subtitles'
       : 'Assembled video (no subtitles)'
