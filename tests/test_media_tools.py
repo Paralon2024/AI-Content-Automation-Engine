@@ -33,6 +33,15 @@ class MediaToolDiagnosticsTests(unittest.TestCase):
         )
         self.assertEqual(entry, "file '/tmp/video\\'s\\\\final.mp4'\n")
 
+    def test_subtitle_filter_path_escapes_filtergraph_syntax(self) -> None:
+        escaped = FFmpegTool._escape_filtergraph_value(
+            "C:/media/it's, [final];a=b.srt"
+        )
+        self.assertEqual(
+            escaped,
+            "C\\:/media/it\\'s\\, \\[final\\]\\;a\\=b.srt",
+        )
+
     def test_concat_manifest_rejects_newline_path_injection(self) -> None:
         with self.assertRaisesRegex(ValueError, "cannot contain newlines"):
             FFmpegTool._format_concat_file_entry(Path("/tmp/first.mp4\nfile 'other.mp4'"))
