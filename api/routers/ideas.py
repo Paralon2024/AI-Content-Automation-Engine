@@ -1,5 +1,8 @@
 import concurrent.futures
+import json
+import math
 import shutil
+import subprocess
 import uuid
 from pathlib import Path
 from typing import Any, AsyncGenerator, List
@@ -32,6 +35,44 @@ _LONG_OUT = Path("flows/image_content_generator/out_long")
 # Keep pipeline jobs serialized while they mutate shared project assets.
 # The job manager routes their output per thread, without redirecting other threads.
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+
+def _validate_mp4(path: Path) -> None:
+    """Reject corrupt containers and files without a usable video stream."""
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=codec_type:format=duration",
+                "-of", "json",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise HTTPException(503, "MP4 validation is unavailable; check ffprobe installation") from exc
+
+    if result.returncode != 0:
+        details = (result.stderr or "ffprobe could not read this file").strip()
+        raise HTTPException(415, f"Invalid or unreadable MP4 file: {details[-500:]}")
+
+    try:
+        metadata = json.loads(result.stdout)
+        streams = metadata.get("streams", [])
+        duration = float(metadata["format"]["duration"])
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(415, "Invalid MP4 metadata or missing video duration") from exc
+
+    has_video = any(stream.get("codec_type") == "video" for stream in streams)
+    if not has_video or not math.isfinite(duration) or duration <= 0:
+        raise HTTPException(415, "MP4 must contain a valid video stream with positive duration")
 
 
 def _out(orientation: VideoOrientation) -> Path:
@@ -299,9 +340,7 @@ async def upload_videos(
                             f"Scene video is too large (500 MB maximum): {file.filename}",
                         )
                     destination.write(chunk)
-            with staged_target.open("rb") as uploaded_file:
-                if b"ftyp" not in uploaded_file.read(16):
-                    raise HTTPException(415, f"Invalid MP4 file: {file.filename}")
+            _validate_mp4(staged_target)
 
         for existing in videos_dir.glob("scene_*.mp4"):
             backup = backup_dir / existing.name
