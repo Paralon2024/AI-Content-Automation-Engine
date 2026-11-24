@@ -14,33 +14,50 @@ class FFmpegTool(BaseModelTool):
     Tool for basic video editing operations using FFmpeg.
     """
 
+    FFMPEG_TIMEOUT_SECONDS = 1800
+    FFPROBE_TIMEOUT_SECONDS = 60
+
+    @staticmethod
+    def _execute(cmd: str, description: str, timeout: int) -> subprocess.CompletedProcess:
+        """Run a parsed FFmpeg command without a shell and enforce a hard timeout."""
+        args = shlex.split(cmd)
+        try:
+            return subprocess.run(
+                args,
+                shell=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            details = exc.stderr or exc.stdout or ""
+            if isinstance(details, bytes):
+                details = details.decode("utf-8", errors="replace")
+            details = details.strip()
+            if len(details) > 4000:
+                details = details[-4000:]
+            diagnostic = f" {details}" if details else ""
+            raise RuntimeError(
+                f"{description} timed out after {timeout} seconds.{diagnostic}"
+            ) from exc
+
     def _run(self, cmd: str) -> None:
-        process = subprocess.run(
-            cmd,
-            shell=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
+        process = self._execute(cmd, "FFmpeg", self.FFMPEG_TIMEOUT_SECONDS)
         if process.returncode != 0:
             details = (process.stderr or process.stdout or "").strip()
             if len(details) > 4000:
                 details = details[-4000:]
             diagnostic = details or "No diagnostic output was returned."
             raise RuntimeError(
-                f"FFmpeg failed (exit code {process.returncode}): {diagnostic}\n"
+                f"FFmpeg failed (exit code {process.returncode}): {diagnostic}\\n"
                 f"Command: {cmd}"
             )
 
     def _probe(self, cmd: str, description: str) -> str:
-        process = subprocess.run(
-            cmd,
-            shell=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
+        process = self._execute(
+            cmd, f"ffprobe for {description}", self.FFPROBE_TIMEOUT_SECONDS
         )
         if process.returncode != 0:
             details = (process.stderr or process.stdout or "").strip()
