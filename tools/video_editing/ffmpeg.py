@@ -1,3 +1,4 @@
+import math
 import shlex
 import subprocess
 import tempfile
@@ -151,7 +152,9 @@ class FFmpegTool(BaseModelTool):
         audio_dur = self.get_audio_duration(audio_in)
         video_dur = self.get_video_duration(video_in)
 
-        if video_dur <= 0:
+        if not math.isfinite(audio_dur) or audio_dur <= 0:
+            raise RuntimeError(f"Invalid audio duration: {audio_dur} for {audio_in}")
+        if not math.isfinite(video_dur) or video_dur <= 0:
             raise RuntimeError(f"Invalid video duration: {video_dur} for {video_in}")
 
         # Calculate speed factor (scale) for video PTS
