@@ -41,6 +41,32 @@ def upload(name, data):
 
 
 class UploadEndpointTests(unittest.TestCase):
+    def test_mp4_validator_rejects_files_without_a_video_stream(self):
+        from subprocess import CompletedProcess
+
+        invalid = CompletedProcess(
+            args=["ffprobe"], returncode=0,
+            stdout='{"streams": [], "format": {"duration": "2.0"}}',
+            stderr="",
+        )
+        with patch.object(ideas_router.subprocess, "run", return_value=invalid):
+            with self.assertRaises(HTTPException) as raised:
+                ideas_router._validate_mp4(Path("fake.mp4"))
+        self.assertEqual(raised.exception.status_code, 415)
+
+    def test_mp4_validator_rejects_zero_duration_video(self):
+        from subprocess import CompletedProcess
+
+        invalid = CompletedProcess(
+            args=["ffprobe"], returncode=0,
+            stdout='{"streams": [{"codec_type": "video"}], "format": {"duration": "0"}}',
+            stderr="",
+        )
+        with patch.object(ideas_router.subprocess, "run", return_value=invalid):
+            with self.assertRaises(HTTPException) as raised:
+                ideas_router._validate_mp4(Path("empty.mp4"))
+        self.assertEqual(raised.exception.status_code, 415)
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.root = Path(self.temp_dir.name)
@@ -190,11 +216,12 @@ class UploadEndpointTests(unittest.TestCase):
         stale.write_bytes(b"stale")
         mp4 = bytes.fromhex("000000186674797069736f6d") + b"-clip"
 
-        result = asyncio.run(
-            ideas_router.upload_videos(
-                1, [upload("scene.mp4", mp4)], orientation=self.orientation
+        result = with patch.object(ideas_router, "_validate_mp4"):
+            result = asyncio.run(
+                ideas_router.upload_videos(
+                    1, [upload("scene.mp4", mp4)], orientation=self.orientation
+                )
             )
-        )
 
         self.assertEqual(result["files_uploaded"], 1)
         self.assertEqual(self.store.get_by_id(1).state, State.VIDEOS_GENERATED)
@@ -248,7 +275,7 @@ class UploadEndpointTests(unittest.TestCase):
             patch.object(ideas_router, "_store", return_value=FailingStore()),
             patch.object(Path, "replace", fail_backup_restore),
         ):
-            with self.assertRaisesRegex(RuntimeError, "rollback was incomplete"):
+            with patch.object(ideas_router, "_validate_mp4"), self.assertRaisesRegex(RuntimeError, "rollback was incomplete"):
                 asyncio.run(
                     ideas_router.upload_videos(
                         1,
@@ -281,7 +308,7 @@ class UploadEndpointTests(unittest.TestCase):
                 raise OSError("simulated metadata persistence failure")
 
         with patch.object(ideas_router, "_store", return_value=FailingStore()):
-            with self.assertRaisesRegex(OSError, "simulated metadata persistence failure"):
+            with patch.object(ideas_router, "_validate_mp4"), self.assertRaisesRegex(OSError, "simulated metadata persistence failure"):
                 asyncio.run(
                     ideas_router.upload_videos(
                         1,
