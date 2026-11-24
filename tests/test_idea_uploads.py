@@ -219,6 +219,50 @@ class UploadEndpointTests(unittest.TestCase):
         self.assertEqual(raised.exception.status_code, 422)
         self.assertEqual(existing.read_bytes(), b"old-scene")
 
+    def test_video_upload_preserves_backup_when_rollback_restore_fails(self):
+        (self.idea_dir / "script.json").write_bytes(valid_script())
+        videos_dir = self.idea_dir / "videos"
+        videos_dir.mkdir()
+        existing = videos_dir / "scene_0001.mp4"
+        existing.write_bytes(b"old-scene")
+        original_state = self.idea.state
+        original_replace = Path.replace
+        preserved_backup = {}
+
+        idea = self.idea
+
+        class FailingStore:
+            def get_by_id(self, idea_id):
+                return idea
+
+            def save(self, record):
+                raise OSError("simulated metadata persistence failure")
+
+        def fail_backup_restore(source, target):
+            if source.parent.name.startswith(".backup-") and Path(target).name == source.name:
+                preserved_backup["directory"] = source.parent
+                raise OSError("simulated restore failure")
+            return original_replace(source, target)
+
+        with (
+            patch.object(ideas_router, "_store", return_value=FailingStore()),
+            patch.object(Path, "replace", fail_backup_restore),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "rollback was incomplete"):
+                asyncio.run(
+                    ideas_router.upload_videos(
+                        1,
+                        [upload("scene.mp4", bytes.fromhex("000000186674797069736f6d") + b"-new")],
+                        orientation=self.orientation,
+                    )
+                )
+
+        backup_dir = preserved_backup["directory"]
+        self.assertTrue(backup_dir.is_dir())
+        self.assertEqual((backup_dir / "scene_0001.mp4").read_bytes(), b"old-scene")
+        self.assertEqual(self.idea.state, original_state)
+        self.assertEqual(list(videos_dir.glob(".upload-*")), [])
+
     def test_video_upload_rolls_back_when_metadata_save_fails(self):
         (self.idea_dir / "script.json").write_bytes(valid_script())
         videos_dir = self.idea_dir / "videos"
