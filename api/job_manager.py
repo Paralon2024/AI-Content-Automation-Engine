@@ -211,6 +211,11 @@ async def stream_job(job_id: str) -> AsyncGenerator[str, None]:
             yield "[DONE]"
         elif state == "failed":
             yield "[FAILED]"
+        else:
+            # Unknown IDs occur after a backend restart or bounded-cache eviction.
+            # Emit a terminal failure so EventSource does not reconnect forever.
+            yield "Job not found; the server may have restarted or its log history expired."
+            yield "[FAILED]"
         return
     while True:
         try:
