@@ -168,9 +168,8 @@ def run_in_job(job_id: str, fn: object) -> None:
 
         terminal = "__FAILED__" if failed else _DONE
 
-        # Enqueue the terminal event before dropping the queue from the registry.
-        # Existing stream generators retain their local queue reference; reconnects
-        # after completion use the bounded terminal-state registry above.
+        # Enqueue the terminal event and retain the bounded log queue until
+        # the first stream subscriber consumes it or the completed-log cache evicts it.
         if _loop and _loop.is_running():
             def finalize() -> None:
                 q = _jobs.get(job_id)
