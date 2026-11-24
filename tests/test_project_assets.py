@@ -296,6 +296,38 @@ class FinalVideoCommitTests(unittest.TestCase):
                 [],
             )
 
+    def test_incomplete_rollback_preserves_previous_export_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pipeline, final_video, named_final = self._make_pipeline(Path(temp_dir))
+            named_final.write_bytes(b"previous published video")
+            original_replace = __import__("os").replace
+
+            def fail_new_export_restore(source, target):
+                if Path(source) == named_final and Path(target) == final_video:
+                    raise OSError("simulated restore failure")
+                return original_replace(source, target)
+
+            with patch(
+                "flows.image_content_generator.pipeline.pipeline.os.replace",
+                side_effect=fail_new_export_restore,
+            ), patch.object(
+                pipeline.store,
+                "save",
+                side_effect=OSError("simulated metadata persistence failure"),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "rollback was incomplete"):
+                    pipeline.step7_rename_final_video(1)
+
+            self.assertFalse(final_video.exists())
+            self.assertEqual(named_final.read_bytes(), b"new final video")
+            backups = list(named_final.parent.glob(f".{named_final.name}.*.backup"))
+            self.assertEqual(len(backups), 1)
+            self.assertEqual(backups[0].read_bytes(), b"previous published video")
+            self.assertEqual(
+                pipeline.store.get_by_id(1).state,
+                State.VIDEO_MUSIC_GENERATED,
+            )
+
     def test_successful_commit_replaces_old_export_and_marks_project_completed(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             pipeline, final_video, named_final = self._make_pipeline(Path(temp_dir))
