@@ -90,6 +90,13 @@ class JobManagerTests(unittest.IsolatedAsyncioTestCase):
         await self._collect(job_ids[1])
         await self._collect(job_ids[2])
 
+    async def test_unknown_job_emits_failure_instead_of_hanging(self) -> None:
+        messages = await self._collect("missing-job-id")
+
+        self.assertEqual(messages[-1], "[FAILED]")
+        self.assertIn("Job not found", messages[0])
+
+
     async def test_successful_job_emits_done(self) -> None:
         job_id = job_manager.create_job()
         await asyncio.to_thread(job_manager.run_in_job, job_id, lambda: None)
