@@ -157,6 +157,8 @@ def delete_entry(path: str) -> dict[str, str]:
     if not path.strip():
         raise HTTPException(400, "Cannot delete the music library root")
     target = _safe_path(path)
+    if target == _LIBRARY.resolve():
+        raise HTTPException(400, "Cannot delete the music library root")
     if not target.exists():
         raise HTTPException(404, "Not found")
     if target.is_dir():
