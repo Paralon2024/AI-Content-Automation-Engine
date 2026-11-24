@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { getCategoryDisplayName, Idea } from '../../tools/types'
+import { getCategoryDisplayName, Idea, IdeaState } from '../../tools/types'
 import {
   IdeaListRoot, ListHeader, CollapseBtn, IdeaCount, NewBtn,
   IdeaItems, NoIdeas, IdeaItem, IdeaTitle, IdeaMeta, IdeaCategory, StateBadge,
   CollapsedStrip, CollapsedCount,
 } from './IdeaList.styled'
 
-const STATE_COLOR: Record<string, string> = {
+const STATE_COLOR: Record<IdeaState, string> = {
   NEW: '#64748b',
   SCRIPT_GENERATED: '#3b82f6',
   VIDEOS_GENERATED: '#f59e0b',
@@ -15,6 +15,17 @@ const STATE_COLOR: Record<string, string> = {
   VIDEO_SUBTITLED: '#6366f1',
   VIDEO_MUSIC_GENERATED: '#ec4899',
   COMPLETED: '#10b981',
+}
+
+const STATE_LABEL: Record<IdeaState, string> = {
+  NEW: 'New',
+  SCRIPT_GENERATED: 'Script ready',
+  VIDEOS_GENERATED: 'Scenes uploaded',
+  AUDIO_GENERATED: 'Voiceover ready',
+  VIDEO_GENERATED: 'Video assembled',
+  VIDEO_SUBTITLED: 'Subtitles added',
+  VIDEO_MUSIC_GENERATED: 'Music added',
+  COMPLETED: 'Completed',
 }
 
 interface IdeaListProps {
@@ -96,7 +107,7 @@ export default function IdeaList({ ideas, selectedId, isOpen, onToggle, onSelect
             <IdeaTitle>#{idea.id} — {idea.title || 'Untitled'}</IdeaTitle>
             <IdeaMeta>
               <IdeaCategory>{getCategoryDisplayName(idea.category) || '—'}</IdeaCategory>
-              <StateBadge $color={STATE_COLOR[idea.state] ?? '#64748b'}>{idea.state}</StateBadge>
+              <StateBadge $color={STATE_COLOR[idea.state] ?? '#64748b'}>{STATE_LABEL[idea.state] ?? idea.state}</StateBadge>
             </IdeaMeta>
           </IdeaItem>
         ))}

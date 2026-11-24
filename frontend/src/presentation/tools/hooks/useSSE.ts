@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 
+const MAX_VISIBLE_LOG_LINES = 1000
+
 export default function useSSE(url: string | null) {
   const [logs, setLogs] = useState<string[]>([])
   const [done, setDone] = useState(false)
@@ -28,7 +30,7 @@ export default function useSSE(url: string | null) {
         setFailed(true)
         es.close()
       } else if (msg !== '[TIMEOUT]') {
-        setLogs(prev => [...prev, msg])
+        setLogs(prev => [...prev, msg].slice(-MAX_VISIBLE_LOG_LINES))
       }
     }
 
