@@ -27,6 +27,16 @@ class MediaToolDiagnosticsTests(unittest.TestCase):
         self.assertTrue(run.call_args.kwargs["capture_output"])
         self.assertTrue(run.call_args.kwargs["text"])
 
+    def test_concat_manifest_escapes_quotes_and_backslashes(self) -> None:
+        entry = FFmpegTool._format_concat_file_entry(
+            Path("/tmp/video's\\final.mp4")
+        )
+        self.assertEqual(entry, "file '/tmp/video\\'s\\\\final.mp4'\n")
+
+    def test_concat_manifest_rejects_newline_path_injection(self) -> None:
+        with self.assertRaisesRegex(ValueError, "cannot contain newlines"):
+            FFmpegTool._format_concat_file_entry(Path("/tmp/first.mp4\nfile 'other.mp4'"))
+
     def test_ffmpeg_runs_without_a_shell_and_uses_timeout(self) -> None:
         process = CompletedProcess(
             args=["ffmpeg", "-version"], returncode=0, stdout="ok", stderr=""
