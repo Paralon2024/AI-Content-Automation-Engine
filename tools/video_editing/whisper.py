@@ -143,6 +143,15 @@ class WhisperTool(BaseModelTool):
                 f"Whisper returned no usable words for subtitle generation: {audio_path}"
             )
 
+        for token in tokens:
+            start_ms = token.offsets.from_ms
+            end_ms = token.offsets.to_ms
+            if start_ms < 0 or end_ms <= start_ms:
+                raise RuntimeError(
+                    f"Whisper returned an invalid token timestamp range for {audio_path}: "
+                    f"{start_ms}ms to {end_ms}ms"
+                )
+
         words: List[WhisperWord] = []
         for t in tokens:
             text, t_from, t_to = t.text, t.offsets.from_ms, t.offsets.to_ms
