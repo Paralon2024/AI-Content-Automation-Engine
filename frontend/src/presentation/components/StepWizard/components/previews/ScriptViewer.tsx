@@ -157,7 +157,7 @@ export default function ScriptViewer({ url }: { url: string }) {
               </Section>
               <Section>
                 <SectionTitle>Video prompt</SectionTitle>
-                <Row><Key>Movimiento</Key><Val>{s.video_prompt.motion}</Val></Row>
+                <Row><Key>Motion</Key><Val>{s.video_prompt.motion}</Val></Row>
                 <Row><Key>Camera</Key><Val>{s.video_prompt.camera_movement}</Val></Row>
                 <Row><Key>Transition</Key><Val>{s.video_prompt.transition}</Val></Row>
                 <Row><Key>Duration</Key><Val>{s.video_prompt.duration_hint}</Val></Row>

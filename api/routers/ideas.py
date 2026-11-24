@@ -16,7 +16,13 @@ from flows.image_content_generator.pipeline.schemas import (
     State,
     VideoOrientation,
 )
+from tools.common.project_assets import (
+    discard_derived_asset_backups,
+    restore_derived_assets,
+    stage_derived_assets,
+)
 from tools.common.storage_folder import FolderStore
+from tools.utils.text import slugify
 
 router = APIRouter(prefix="/api/ideas", tags=["ideas"])
 
@@ -196,14 +202,19 @@ async def upload_script(
     old_title = idea.title
     old_state = idea.state
     new_script_installed = False
+    asset_backups = []
 
-    # Stage the new script and preserve the previous one until metadata is saved.
+    # Stage the new script and preserve prior outputs until metadata is saved.
     try:
         staged_script.write_bytes(content)
         if script_path.exists():
             script_path.replace(backup_script)
         staged_script.replace(script_path)
         new_script_installed = True
+
+        # Existing audio, scene videos and finished edits belong to the old
+        # script. Move them aside so later pipeline stages cannot reuse stale files.
+        asset_backups = stage_derived_assets(idea_dir)
 
         if title:
             idea.title = title
@@ -212,6 +223,7 @@ async def upload_script(
     except Exception:
         idea.title = old_title
         idea.state = old_state
+        restore_derived_assets(asset_backups)
         if new_script_installed:
             script_path.unlink(missing_ok=True)
         if backup_script.exists():
@@ -221,6 +233,7 @@ async def upload_script(
     finally:
         staged_script.unlink(missing_ok=True)
 
+    discard_derived_asset_backups(asset_backups)
     backup_script.unlink(missing_ok=True)
     return idea.model_dump()
 
@@ -325,11 +338,18 @@ def get_video(
     idea_id: int,
     orientation: VideoOrientation = VideoOrientation.SHORT,
 ) -> FileResponse:
+    idea = _store(orientation).get_by_id(idea_id)
+    if not idea:
+        raise HTTPException(404, "Idea not found")
+
     idea_dir = _out(orientation) / "ideas" / f"idea_{idea_id:06d}"
-    videos = list(idea_dir.glob("*.mp4"))
-    if not videos:
-        raise HTTPException(404, "Video not found")
-    return FileResponse(str(videos[0]), filename=videos[0].name, media_type="video/mp4")
+    video_title = idea.title if idea.title else f"video_{idea.id}"
+    video_path = idea_dir / f"{slugify(video_title)}.mp4"
+    if not video_path.is_file():
+        raise HTTPException(404, "Final video not found")
+    return FileResponse(
+        str(video_path), filename=video_path.name, media_type="video/mp4"
+    )
 
 
 @router.post("/{idea_id}/audio")

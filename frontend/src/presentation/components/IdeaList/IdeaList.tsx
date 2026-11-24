@@ -28,13 +28,24 @@ interface IdeaListProps {
 
 export default function IdeaList({ ideas, selectedId, isOpen, onToggle, onSelect, onCreated }: IdeaListProps) {
   const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
 
   async function handleCreate() {
+    if (creating) return
     setCreating(true)
-    const res = await fetch('/api/ideas/generate', { method: 'POST' })
-    const idea = (await res.json()) as Idea
-    setCreating(false)
-    onCreated(idea)
+    setCreateError(null)
+    try {
+      const res = await fetch('/api/ideas/generate', { method: 'POST' })
+      if (!res.ok) {
+        throw new Error(`Create request failed (HTTP ${res.status})`)
+      }
+      const idea = (await res.json()) as Idea
+      onCreated(idea)
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : 'Could not create the idea.')
+    } finally {
+      setCreating(false)
+    }
   }
 
   if (!isOpen) {
@@ -69,6 +80,12 @@ export default function IdeaList({ ideas, selectedId, isOpen, onToggle, onSelect
           {creating ? '…' : '+ Create video'}
         </NewBtn>
       </ListHeader>
+
+      {createError && (
+        <p role="alert" style={{ color: '#ef4444', fontSize: 12, margin: '8px 12px' }}>
+          {createError}
+        </p>
+      )}
 
       <IdeaItems>
         {ideas.length === 0 && (

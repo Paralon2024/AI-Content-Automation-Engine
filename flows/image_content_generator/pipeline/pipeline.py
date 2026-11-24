@@ -1,6 +1,10 @@
 
+import os
+import shutil
+import uuid
+from functools import wraps
 from pathlib import Path
-from typing import Any, ClassVar, List, Optional, Type, TypeVar
+from typing import Any, Callable, ClassVar, List, Optional, Type, TypeVar
 
 from pydantic import BaseModel, PrivateAttr
 
@@ -18,14 +22,47 @@ from tools.audio_generation.audio_tool import AudioTool
 from tools.audio_generation.gemini import GeminiAudioGenerator
 from tools.common.base_model import BaseModelTool
 from tools.common.messenger import Messenger
+from tools.common.project_assets import (
+    discard_derived_asset_backups,
+    restore_derived_assets,
+    stage_derived_assets,
+)
 from tools.common.storage_folder import FolderStore
 from tools.text_generation.gemini import GeminiTextGenerator
 from tools.utils.text import slugify
-from tools.utils.time import retry
 from tools.video_editing.ffmpeg import FFmpegTool
 from tools.video_editing.whisper import WhisperTool
 
 T = TypeVar("T", bound=BaseModel)
+
+
+def preserve_audios_on_force(method: Callable[..., Any]) -> Callable[..., Any]:
+    """Keep the previous audio set if an explicit regeneration fails."""
+    @wraps(method)
+    def wrapper(self: "Pipeline", idea_id: int, force: bool = False) -> Any:
+        if not force:
+            return method(self, idea_id, force=False)
+
+        idea_dir = self.get_idea_path(idea_id)
+        audio_dir = idea_dir / self.AUDIOS_DIR
+        backup_dir = idea_dir / f".audios.{uuid.uuid4().hex}.backup"
+        if audio_dir.exists():
+            audio_dir.replace(backup_dir)
+
+        try:
+            result = method(self, idea_id, force=True)
+        except Exception:
+            if audio_dir.exists():
+                shutil.rmtree(audio_dir, ignore_errors=True)
+            if backup_dir.exists():
+                backup_dir.replace(audio_dir)
+            raise
+        else:
+            if backup_dir.exists():
+                shutil.rmtree(backup_dir, ignore_errors=True)
+            return result
+
+    return wrapper
 
 
 class Pipeline(BaseModelTool):
@@ -132,11 +169,14 @@ class Pipeline(BaseModelTool):
         return model_class.model_validate_json(path.read_text(encoding="utf-8"))
 
     def save_json(self, idea_id: int, filename: str, data: BaseModel):
-        """
-        Saves a Pydantic model as a JSON file in the idea's root directory.
-        """
+        """Save a Pydantic model with an atomic same-directory replacement."""
         path = self.get_idea_path(idea_id) / filename
-        path.write_text(data.model_dump_json(indent=2), encoding="utf-8")
+        temporary_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            temporary_path.write_text(data.model_dump_json(indent=2), encoding="utf-8")
+            os.replace(temporary_path, path)
+        finally:
+            temporary_path.unlink(missing_ok=True)
 
     def get_out_dir(self) -> Path:
         """
@@ -186,18 +226,46 @@ class Pipeline(BaseModelTool):
     def step1_generate_story(self, idea_id: int, form: ScriptFormData):
         idea_obj = self.store.get_by_id(idea_id)
         if not idea_obj:
-            Messenger.error(f"Idea {idea_id} not found.")
-            return
+            raise ValueError(f"Idea {idea_id} not found")
 
         Messenger.info("\n--- Generating cinematic concept and script ---")
-
         script, title, category = self._generate_from_form(form)
-        idea_obj.form = form
-        idea_obj.title = title
-        idea_obj.category = category
-        self.save_json(idea_obj.id, self.SCRIPT_JSON, script)
-        idea_obj.state = State.SCRIPT_GENERATED
-        self.store.save(idea_obj)
+
+        idea_dir = self.get_idea_path(idea_obj.id)
+        script_path = idea_dir / self.SCRIPT_JSON
+        had_previous_script = script_path.exists()
+        script_backup = None
+        if had_previous_script:
+            script_backup = idea_dir / f".script.{uuid.uuid4().hex}.backup"
+            script_path.replace(script_backup)
+
+        asset_backups = []
+        old_form, old_title = idea_obj.form, idea_obj.title
+        old_category, old_state = idea_obj.category, idea_obj.state
+        try:
+            # A replacement script invalidates every generated asset from the old
+            # script. Stage those assets until the new script and metadata commit.
+            asset_backups = stage_derived_assets(idea_dir)
+            self.save_json(idea_obj.id, self.SCRIPT_JSON, script)
+            idea_obj.form = form
+            idea_obj.title = title
+            idea_obj.category = category
+            idea_obj.state = State.SCRIPT_GENERATED
+            self.store.save(idea_obj)
+        except Exception:
+            idea_obj.form, idea_obj.title = old_form, old_title
+            idea_obj.category, idea_obj.state = old_category, old_state
+            restore_derived_assets(asset_backups)
+            if script_backup and script_backup.exists():
+                script_path.unlink(missing_ok=True)
+                script_backup.replace(script_path)
+            elif not had_previous_script:
+                script_path.unlink(missing_ok=True)
+            raise
+
+        discard_derived_asset_backups(asset_backups)
+        if script_backup:
+            script_backup.unlink(missing_ok=True)
         Messenger.success(f"Script generated: {State.SCRIPT_GENERATED} finalized.\n")
 
     def _generate_from_form(self, form: ScriptFormData) -> tuple[VideoScript, str, str]:
@@ -218,7 +286,7 @@ class Pipeline(BaseModelTool):
         title = form.idea[:80].strip()
         return script, title, form.category
 
-    @retry(max_attempts=3)
+    @preserve_audios_on_force
     def step3_generate_audios(self, idea_id: int, force: bool = False):
         """
         Generate Audio: Batched AI-Guided Batching (Whisper + Gemini).
@@ -226,8 +294,7 @@ class Pipeline(BaseModelTool):
         """
         idea_obj = self.store.get_by_id(idea_id)
         if not idea_obj:
-            Messenger.error(f"Idea {idea_id} not found.")
-            return
+            raise ValueError(f"Idea {idea_id} not found")
 
         if force:
             import shutil
@@ -354,8 +421,7 @@ class Pipeline(BaseModelTool):
         """
         idea_obj = self.store.get_by_id(idea_id)
         if not idea_obj:
-            Messenger.error(f"Idea {idea_id} not found.")
-            return
+            raise ValueError(f"Idea {idea_id} not found")
 
         Messenger.info("\n--- Syncing AI scene videos to audio duration ---")
 
@@ -400,8 +466,7 @@ class Pipeline(BaseModelTool):
         """
         idea_obj = self.store.get_by_id(idea_id)
         if not idea_obj:
-            Messenger.error(f"Idea {idea_id} not found.")
-            return
+            raise ValueError(f"Idea {idea_id} not found")
 
         Messenger.info("\n--- Generating subtitles for the video ---")
 
@@ -447,8 +512,7 @@ class Pipeline(BaseModelTool):
         """
         idea_obj = self.store.get_by_id(idea_id)
         if not idea_obj:
-            Messenger.error(f"Idea {idea_id} not found.")
-            return
+            raise ValueError(f"Idea {idea_id} not found")
 
         Messenger.info("\n--- Adding background music ---")
 
@@ -459,9 +523,8 @@ class Pipeline(BaseModelTool):
             idea_obj.id, self.EDITIONS_DIR, self.FINAL_VIDEO
         )
 
-        if not music_path.exists():
-            Messenger.error(f"Music file not found: {music_path}")
-            return
+        if not music_path.is_file():
+            raise FileNotFoundError(f"Music file not found: {music_path}")
 
         self.ffmpeg.add_background_music(
             subtitled_video,
@@ -485,8 +548,7 @@ class Pipeline(BaseModelTool):
         """
         idea_obj = self.store.get_by_id(idea_id)
         if not idea_obj:
-            Messenger.error(f"Idea {idea_id} not found.")
-            return
+            raise ValueError(f"Idea {idea_id} not found")
 
         Messenger.info("\n--- Final Renaming: Naming video after script title ---")
 
@@ -494,14 +556,15 @@ class Pipeline(BaseModelTool):
         final_video = self.get_idea_asset_path(
             idea_obj.id, self.EDITIONS_DIR, self.FINAL_VIDEO
         )
-        if not final_video.exists():
-            Messenger.error(f"Final video with music not found: {final_video}")
-            return
+        if not final_video.is_file():
+            raise FileNotFoundError(f"Final video with music not found: {final_video}")
 
         # 3. Renames the final video.
         video_title = idea_obj.title if idea_obj.title else f"video_{idea_obj.id}"
         named_final = self.get_named_video_path(idea_obj.id, video_title)
-        final_video.rename(named_final)
+        # os.replace works consistently on Windows and POSIX when regenerating
+        # a completed idea whose previous final video already exists.
+        os.replace(final_video, named_final)
 
         # 4. Updates state.
         idea_obj.state = State.COMPLETED

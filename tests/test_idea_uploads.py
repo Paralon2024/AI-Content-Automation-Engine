@@ -78,6 +78,31 @@ class UploadEndpointTests(unittest.TestCase):
             valid_script(),
         )
 
+    def test_script_upload_invalidates_all_assets_from_the_previous_script(self):
+        audios = self.idea_dir / "audios"
+        videos = self.idea_dir / "videos"
+        editions = self.idea_dir / "editions"
+        audios.mkdir()
+        videos.mkdir()
+        editions.mkdir()
+        (audios / "scene_0001.wav").write_bytes(b"old audio")
+        (videos / "scene_0001.mp4").write_bytes(b"old video")
+        (editions / "raw_video.mp4").write_bytes(b"old edition")
+        (self.idea_dir / "old_final.mp4").write_bytes(b"old final")
+
+        asyncio.run(
+            ideas_router.upload_script(
+                1, upload("script.json", valid_script()), title="Replacement script",
+                orientation=self.orientation,
+            )
+        )
+
+        self.assertFalse(audios.exists())
+        self.assertFalse(videos.exists())
+        self.assertFalse(editions.exists())
+        self.assertEqual(list(self.idea_dir.glob("*.mp4")), [])
+        self.assertEqual(list(self.idea_dir.glob(".*.backup")), [])
+
     def test_script_staging_failure_preserves_existing_script(self):
         existing = b'{"scenes":[]}'
         script_path = self.idea_dir / "script.json"
@@ -119,6 +144,17 @@ class UploadEndpointTests(unittest.TestCase):
         old_script = b'{"old":"script"}'
         script_path = self.idea_dir / "script.json"
         script_path.write_bytes(old_script)
+        audios = self.idea_dir / "audios"
+        videos = self.idea_dir / "videos"
+        editions = self.idea_dir / "editions"
+        audios.mkdir()
+        videos.mkdir()
+        editions.mkdir()
+        (audios / "scene_0001.wav").write_bytes(b"old audio")
+        (videos / "scene_0001.mp4").write_bytes(b"old video")
+        (editions / "raw_video.mp4").write_bytes(b"old edition")
+        old_final = self.idea_dir / "old_final.mp4"
+        old_final.write_bytes(b"old final")
         idea = self.idea
 
         class FailingStore:
@@ -141,6 +177,10 @@ class UploadEndpointTests(unittest.TestCase):
         self.assertEqual(idea.title, "Original title")
         self.assertEqual(idea.state, State.NEW)
         self.assertEqual(list(self.idea_dir.glob(".script-*.bak")), [])
+        self.assertEqual((audios / "scene_0001.wav").read_bytes(), b"old audio")
+        self.assertEqual((videos / "scene_0001.mp4").read_bytes(), b"old video")
+        self.assertEqual((editions / "raw_video.mp4").read_bytes(), b"old edition")
+        self.assertEqual(old_final.read_bytes(), b"old final")
 
     def test_video_upload_installs_expected_scene_set(self):
         (self.idea_dir / "script.json").write_bytes(valid_script())
