@@ -287,7 +287,6 @@ class Pipeline(BaseModelTool):
         title = form.idea[:80].strip()
         return script, title, form.category
 
-    @preserve_audios_on_force
     def _is_valid_scene_audio(self, audio_path: Path) -> bool:
         """Return whether a cached scene WAV is readable and has a usable duration."""
         if not audio_path.is_file() or audio_path.stat().st_size <= 44:
@@ -316,6 +315,7 @@ class Pipeline(BaseModelTool):
                 f"expected about {expected_duration:.3f}s, got {actual_duration:.3f}s."
             )
 
+    @preserve_audios_on_force
     def step3_generate_audios(self, idea_id: int, force: bool = False):
         """
         Generate Audio: Batched AI-Guided Batching (Whisper + Gemini).
