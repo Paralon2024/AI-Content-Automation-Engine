@@ -90,7 +90,7 @@ Treat the global visual direction as a locked visual bible, not a loose suggesti
 - Keep the protagonist's face, age range, hair, build, wardrobe, and defining details consistent. If the protagonist is not visible, preserve the identity of recurring props and locations.
 - Keep geography, room layout, time of night, weather, lens character, contrast, film grain, and color grade coherent between adjacent scenes.
 - Use a consistent cinematic horror language: motivated practical light, deep but readable shadows, layered darkness, atmospheric haze, tactile surfaces, restrained highlights, and deliberate negative space.
-- Direction D / Combined Horror means grounded cinematic realism with subtle surreal or graphic accents. Do not turn the whole image into cartoon, anime, fantasy concept art, or generic neon cyberpunk.
+- Honor the selected visual direction exactly. When Direction D / Combined Horror is selected, use grounded cinematic realism with subtle surreal or graphic accents; do not drift into generic neon cyberpunk.
 - Frame for vertical `{aspect_ratio}`; keep the important subject and story clue readable on a phone screen.
 - No captions, lettering, logos, watermarks, UI overlays, or random decorative symbols inside generated images.
 
@@ -142,6 +142,13 @@ The final reveal must be a consequence of the core idea, never a random monster,
 
 If any answer is NO, revise the script before returning it. Return only data matching the required JSON schema.
 """
+
+def get_script_prompt_template(category: str, style: str) -> str:
+    """Select the narrative prompt while preserving the user's chosen art style."""
+    if category == "horror" or style == "horror_cinematic":
+        return HORROR_SCRIPT_PROMPT
+    return FORM_SCRIPT_PROMPT
+
 
 # ====================================================================================
 # JSON SCHEMAS
