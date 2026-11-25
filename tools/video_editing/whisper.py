@@ -24,7 +24,9 @@ class WhisperTool(BaseModelTool):
     )
     TIMEOUT_SECONDS: ClassVar[int] = 900
 
-    def _run(self, cmd: List[str]) -> None:
+    def _run(self, cmd: List[str] | str) -> None:
+        if isinstance(cmd, str):
+            cmd = shlex.split(cmd)
         command_display = shlex.join(cmd)
         try:
             process = subprocess.run(
