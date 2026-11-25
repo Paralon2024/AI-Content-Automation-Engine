@@ -3,7 +3,7 @@ import os
 import shlex
 import subprocess
 from pathlib import Path
-from typing import ClassVar, List, Optional
+from typing import ClassVar, List
 
 from pydantic import ValidationError
 
@@ -16,9 +16,8 @@ from tools.video_editing.whisper_schemas import (
 
 
 class WhisperTool(BaseModelTool):
-    """
-    Tool for transcribing audio using whisper-cpp and generating SRT files.
-    """
+    """Transcribe audio using whisper.cpp and generate SRT files."""
+
     DEFAULT_MODEL: ClassVar[str] = os.getenv(
         "WHISPER_MODEL_PATH", "models/whisper/ggml-small.bin"
     )
@@ -68,6 +67,13 @@ class WhisperTool(BaseModelTool):
             payload = json.load(cache_file)
         return WhisperTranscription.model_validate(payload)
 
+    @staticmethod
+    def _validation_details(exc: Exception) -> str:
+        details = str(exc).strip()
+        if len(details) > 2500:
+            details = details[:2500] + "..."
+        return details or exc.__class__.__name__
+
     def _transcribe_to_json(self, audio_path: Path, json_path: Path) -> WhisperTranscription:
         """Run whisper.cpp and validate the JSON it just produced."""
         cmd = [
@@ -90,38 +96,26 @@ class WhisperTool(BaseModelTool):
         except (OSError, json.JSONDecodeError, ValidationError, UnicodeDecodeError) as exc:
             json_path.unlink(missing_ok=True)
             raise RuntimeError(
-                f"Whisper generated an invalid transcription JSON: {json_path}. "
-                "The invalid output was deleted. Check the Whisper CLI output format/model, "
-                "then retry this step."
+                f"Whisper generated invalid JSON at {json_path}: "
+                f"{self._validation_details(exc)}. The invalid output was deleted."
             ) from exc
 
-    def _get_transcription_json(
-        self,
-        audio_path: Path,
-    ) -> WhisperTranscription:
-        """
-        Reuse a valid cache. If an old cache is malformed, delete it and regenerate
-        once automatically instead of failing the entire pipeline immediately.
-        """
+    def _get_transcription_json(self, audio_path: Path) -> WhisperTranscription:
+        """Reuse a valid cache; regenerate a malformed cache once automatically."""
         json_path = audio_path.with_name(audio_path.name + ".json")
 
         if json_path.is_file():
             try:
                 return self._load_transcription_cache(json_path)
             except (OSError, json.JSONDecodeError, ValidationError, UnicodeDecodeError):
-                # A stale/incomplete cache is disposable: regenerate from the WAV.
                 json_path.unlink(missing_ok=True)
 
         return self._transcribe_to_json(audio_path, json_path)
 
     def get_transcription_segments(
-        self,
-        audio_path: Path
+        self, audio_path: Path
     ) -> List[WhisperTranscriptionSegment]:
-        """
-        Transcribes audio and returns a list of segments with text and timestamps.
-        Each segment: {"text": str, "start": float, "end": float} (times in seconds)
-        """
+        """Return transcription segments with timestamps in seconds."""
         data = self._get_transcription_json(audio_path)
         segments: List[WhisperTranscriptionSegment] = []
         for segment in data.transcription:
@@ -135,32 +129,21 @@ class WhisperTool(BaseModelTool):
                     f"Whisper returned an invalid timestamp range for {audio_path}: "
                     f"{start:.3f}s to {end:.3f}s"
                 )
-            segments.append(
-                WhisperTranscriptionSegment(text=text, start=start, end=end)
-            )
+            segments.append(WhisperTranscriptionSegment(text=text, start=start, end=end))
 
         if not segments:
-            raise RuntimeError(
-                f"Whisper returned no usable speech segments for {audio_path}"
-            )
+            raise RuntimeError(f"Whisper returned no usable speech segments for {audio_path}")
         return segments
 
-    def generate_srt(
-        self,
-        audio_path: Path,
-        output_srt: Path,
-    ) -> None:
-        """
-        Generates SRT file from audio file.
-        """
+    def generate_srt(self, audio_path: Path, output_srt: Path) -> None:
+        """Generate an SRT file from Whisper's token timestamps."""
         data = self._get_transcription_json(audio_path)
 
-        # 1. Extract and merge tokens into words
         tokens = [
-            t
-            for s in data.transcription
-            for t in s.tokens
-            if not t.text.startswith("[_") and t.text.strip()
+            token
+            for segment in data.transcription
+            for token in segment.tokens
+            if not token.text.startswith("[_") and token.text.strip()
         ]
 
         if not tokens:
@@ -169,34 +152,45 @@ class WhisperTool(BaseModelTool):
             )
 
         words: List[WhisperWord] = []
-        for t in tokens:
-            text, t_from, t_to = t.text, t.offsets.from_ms, t.offsets.to_ms
+        for token in tokens:
+            text = token.text
+            start_ms = token.offsets.from_ms
+            end_ms = token.offsets.to_ms
+            if start_ms < 0 or end_ms <= start_ms:
+                raise RuntimeError(
+                    f"Whisper returned invalid timing for speech token {text!r} "
+                    f"in {audio_path}: {start_ms}ms to {end_ms}ms"
+                )
             if text.startswith(" ") or not words:
-                words.append(WhisperWord(text=text.strip(), start=t_from, end=t_to))
+                words.append(WhisperWord(text=text.strip(), start=start_ms, end=end_ms))
             else:
                 words[-1].text += text
-                words[-1].end = t_to
+                words[-1].end = end_ms
 
-        # 2. Group words into blocks (max 3 words or pause > 0.4s)
         blocks: List[List[WhisperWord]] = []
         current: List[WhisperWord] = []
-        for w in words:
-            pause = (float(w.start) - float(current[-1].end)) / 1000.0 if current else 0.0
+        for word in words:
+            pause = (
+                (float(word.start) - float(current[-1].end)) / 1000.0
+                if current else 0.0
+            )
             if len(current) >= 3 or pause > 0.4:
                 blocks.append(current)
                 current = []
-            current.append(w)
+            current.append(word)
         if current:
             blocks.append(current)
 
         def fmt(ms: int) -> str:
-            s, ms = divmod(ms, 1000)
-            m, s = divmod(s, 60)
-            h, m = divmod(m, 60)
-            return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+            seconds, milliseconds = divmod(ms, 1000)
+            minutes, seconds = divmod(seconds, 60)
+            hours, minutes = divmod(minutes, 60)
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
 
-        # 3. Write SRT
-        with open(output_srt, 'w', encoding='utf-8') as f:
-            for i, block in enumerate(blocks):
-                f.write(f"{i+1}\n{fmt(block[0].start)} --> {fmt(block[-1].end)}\n")
-                f.write(" ".join(w.text for w in block) + "\n\n")
+        output_srt.parent.mkdir(parents=True, exist_ok=True)
+        with output_srt.open("w", encoding="utf-8") as output_file:
+            for index, block in enumerate(blocks):
+                output_file.write(
+                    f"{index + 1}\n{fmt(block[0].start)} --> {fmt(block[-1].end)}\n"
+                )
+                output_file.write(" ".join(word.text for word in block) + "\n\n")
