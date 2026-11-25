@@ -5,6 +5,7 @@ import { Form, Field, Label, TextArea, TextInput, Row, Select, SubmitBtn } from 
 const STYLES = [
   { value: 'stickman', label: 'Stickman / Sketch' },
   { value: 'realistic', label: 'Realistic / Cinematic' },
+  { value: 'horror_cinematic', label: 'Cinematic Horror — Combined (Direction D)' },
   { value: 'anime', label: 'Anime / Manga' },
   { value: 'watercolor', label: 'Watercolor / Artistic' },
   { value: 'flat', label: 'Flat / Minimalist' },
