@@ -89,6 +89,32 @@ class WhisperExecutionTests(unittest.TestCase):
             self.assertEqual(result.transcription[0].text, "hello")
             run.assert_called_once()
 
+    def test_full_whisper_json_accepts_zero_duration_boundary_tokens(self):
+        # whisper.cpp emits zero-duration [_BEG_] and [_TT_*] control tokens.
+        payload = {
+            "transcription": [
+                {
+                    "text": " hello",
+                    "offsets": {"from": 0, "to": 1000},
+                    "tokens": [
+                        {"text": "[_BEG_]", "offsets": {"from": 0, "to": 0}},
+                        {"text": " hello", "offsets": {"from": 100, "to": 900}},
+                        {"text": "[_TT_50]", "offsets": {"from": 1000, "to": 1000}},
+                    ],
+                }
+            ]
+        }
+
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "transcription.json"
+            cache.write_text(json.dumps(payload), encoding="utf-8")
+
+            result = WhisperTool._load_transcription_cache(cache)
+
+        self.assertEqual(len(result.transcription[0].tokens), 3)
+        self.assertEqual(result.transcription[0].tokens[0].offsets.from_ms, 0)
+        self.assertEqual(result.transcription[0].tokens[2].offsets.to_ms, 1000)
+
     @patch.object(WhisperTool, "_run")
     def test_invalid_fresh_output_is_deleted_with_clear_error(self, run):
         with tempfile.TemporaryDirectory() as directory:
