@@ -135,15 +135,17 @@ class MediaToolDiagnosticsTests(unittest.TestCase):
 
         self.assertTrue(run.call_args.kwargs["capture_output"])
 
-    def test_invalid_whisper_cache_schema_is_deleted(self) -> None:
+    def test_invalid_whisper_cache_schema_is_deleted_and_whisper_is_retried(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             audio_path = Path(temp_dir) / "scene.wav"
             cache_path = audio_path.with_name(audio_path.name + ".json")
             cache_path.write_text(json.dumps({"unexpected": []}), encoding="utf-8")
 
-            with self.assertRaisesRegex(RuntimeError, "Invalid Whisper transcription cache"):
-                WhisperTool()._get_transcription_json(audio_path)
+            with patch.object(WhisperTool, "_run") as run:
+                with self.assertRaisesRegex(RuntimeError, "did not create its expected JSON output"):
+                    WhisperTool()._get_transcription_json(audio_path)
 
+            run.assert_called_once()
             self.assertFalse(cache_path.exists())
 
     def test_empty_whisper_result_is_not_accepted_as_successful_alignment(self) -> None:
@@ -176,9 +178,11 @@ class MediaToolDiagnosticsTests(unittest.TestCase):
                         encoding="utf-8",
                     )
 
-                    with self.assertRaisesRegex(RuntimeError, "Invalid Whisper transcription cache"):
-                        WhisperTool().generate_srt(audio_path, output_srt)
+                    with patch.object(WhisperTool, "_run") as run:
+                        with self.assertRaisesRegex(RuntimeError, "did not create its expected JSON output"):
+                            WhisperTool().generate_srt(audio_path, output_srt)
 
+                    run.assert_called_once()
                     self.assertFalse(output_srt.exists())
                     self.assertFalse(cache_path.exists())
 
