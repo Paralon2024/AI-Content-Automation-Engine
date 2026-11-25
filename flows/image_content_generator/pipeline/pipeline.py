@@ -274,7 +274,11 @@ class Pipeline(BaseModelTool):
         style_desc = base_constants.STYLE_DESCRIPTIONS.get(form.style, form.style)
         tone_desc = base_constants.TONE_DESCRIPTIONS.get(form.tone, form.tone)
         category_desc = base_constants.CATEGORY_DESCRIPTIONS.get(form.category, form.category)
-        prompt = base_constants.FORM_SCRIPT_PROMPT.format(
+        prompt_template = base_constants.get_script_prompt_template(
+            category=form.category,
+            style=form.style,
+        )
+        prompt = prompt_template.format(
             idea=form.idea,
             style_desc=style_desc,
             tone_desc=tone_desc,
