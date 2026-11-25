@@ -3,7 +3,7 @@ import os
 import shlex
 import subprocess
 from pathlib import Path
-from typing import ClassVar, List
+from typing import ClassVar, List, Optional
 
 from pydantic import ValidationError
 
@@ -24,7 +24,9 @@ class WhisperTool(BaseModelTool):
     )
     TIMEOUT_SECONDS: ClassVar[int] = 900
 
-    def _run(self, cmd: List[str]) -> None:
+    def _run(self, cmd: List[str] | str) -> None:
+        if isinstance(cmd, str):
+            cmd = shlex.split(cmd)
         command_display = shlex.join(cmd)
         try:
             process = subprocess.run(
@@ -59,35 +61,58 @@ class WhisperTool(BaseModelTool):
                 f"Command: {command_display}"
             )
 
+    @staticmethod
+    def _load_transcription_cache(json_path: Path) -> WhisperTranscription:
+        """Read and validate a Whisper JSON cache, including its on-disk encoding."""
+        with json_path.open("r", encoding="utf-8") as cache_file:
+            payload = json.load(cache_file)
+        return WhisperTranscription.model_validate(payload)
+
+    def _transcribe_to_json(self, audio_path: Path, json_path: Path) -> WhisperTranscription:
+        """Run whisper.cpp and validate the JSON it just produced."""
+        cmd = [
+            "whisper-cli",
+            "-m", self.DEFAULT_MODEL,
+            "-l", "en",
+            "-ojf",
+            "-f", str(audio_path),
+        ]
+        self._run(cmd)
+
+        if not json_path.is_file():
+            raise RuntimeError(
+                f"Whisper completed but did not create its expected JSON output: {json_path}. "
+                "Check the Whisper CLI version and output permissions."
+            )
+
+        try:
+            return self._load_transcription_cache(json_path)
+        except (OSError, json.JSONDecodeError, ValidationError, UnicodeDecodeError) as exc:
+            json_path.unlink(missing_ok=True)
+            raise RuntimeError(
+                f"Whisper generated an invalid transcription JSON: {json_path}. "
+                "The invalid output was deleted. Check the Whisper CLI output format/model, "
+                "then retry this step."
+            ) from exc
+
     def _get_transcription_json(
         self,
         audio_path: Path,
     ) -> WhisperTranscription:
         """
-        Runs whisper-cli (if needed) and returns the parsed JSON content.
+        Reuse a valid cache. If an old cache is malformed, delete it and regenerate
+        once automatically instead of failing the entire pipeline immediately.
         """
         json_path = audio_path.with_name(audio_path.name + ".json")
-        if not json_path.exists():
-            # -ojf: output json full (tokens with timestamps)
-            cmd = [
-                "whisper-cli",
-                "-m", self.DEFAULT_MODEL,
-                "-l", "en",
-                "-ojf",
-                "-f", str(audio_path),
-            ]
-            self._run(cmd)
 
-        with open(json_path, 'r', encoding='utf-8') as f:
+        if json_path.is_file():
             try:
-                return WhisperTranscription.model_validate(json.load(f))
-            except (json.JSONDecodeError, ValidationError, UnicodeDecodeError) as exc:
-                # A malformed or schema-incompatible cache must never be reused.
+                return self._load_transcription_cache(json_path)
+            except (OSError, json.JSONDecodeError, ValidationError, UnicodeDecodeError):
+                # A stale/incomplete cache is disposable: regenerate from the WAV.
                 json_path.unlink(missing_ok=True)
-                raise RuntimeError(
-                    f"Invalid Whisper transcription cache: {json_path}. "
-                    "The cache was deleted; retry this step to regenerate it."
-                ) from exc
+
+        return self._transcribe_to_json(audio_path, json_path)
 
     def get_transcription_segments(
         self,

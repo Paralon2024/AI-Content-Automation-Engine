@@ -1,8 +1,24 @@
+import json
 import subprocess
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from tools.video_editing.whisper import WhisperTool
+
+
+VALID_TRANSCRIPTION = {
+    "transcription": [
+        {
+            "text": "hello",
+            "offsets": {"from": 0, "to": 1000},
+            "tokens": [
+                {"text": " hello", "offsets": {"from": 0, "to": 1000}}
+            ],
+        }
+    ]
+}
 
 
 class WhisperExecutionTests(unittest.TestCase):
@@ -36,6 +52,55 @@ class WhisperExecutionTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "exit code 2.*model file not found"):
             WhisperTool()._run(["whisper-cli", "-m", "missing.bin"])
+
+    @patch.object(WhisperTool, "_run")
+    def test_invalid_existing_cache_is_deleted_and_regenerated(self, run):
+        with tempfile.TemporaryDirectory() as directory:
+            audio = Path(directory) / "batch_0001.wav"
+            cache = audio.with_name(audio.name + ".json")
+            audio.write_bytes(b"wav")
+            cache.write_text("{invalid json", encoding="utf-8")
+
+            def write_valid_output(command):
+                cache.write_text(json.dumps(VALID_TRANSCRIPTION), encoding="utf-8")
+
+            run.side_effect = write_valid_output
+
+            result = WhisperTool()._get_transcription_json(audio)
+
+            self.assertEqual(result.transcription[0].text, "hello")
+            self.assertEqual(run.call_count, 1)
+            self.assertTrue(cache.is_file())
+
+    @patch.object(WhisperTool, "_run")
+    def test_missing_cache_is_generated_and_validated(self, run):
+        with tempfile.TemporaryDirectory() as directory:
+            audio = Path(directory) / "batch_0001.wav"
+            cache = audio.with_name(audio.name + ".json")
+            audio.write_bytes(b"wav")
+
+            def write_valid_output(command):
+                cache.write_text(json.dumps(VALID_TRANSCRIPTION), encoding="utf-8")
+
+            run.side_effect = write_valid_output
+
+            result = WhisperTool()._get_transcription_json(audio)
+
+            self.assertEqual(result.transcription[0].text, "hello")
+            run.assert_called_once()
+
+    @patch.object(WhisperTool, "_run")
+    def test_invalid_fresh_output_is_deleted_with_clear_error(self, run):
+        with tempfile.TemporaryDirectory() as directory:
+            audio = Path(directory) / "batch_0001.wav"
+            cache = audio.with_name(audio.name + ".json")
+            audio.write_bytes(b"wav")
+            run.side_effect = lambda command: cache.write_text("{}", encoding="utf-8")
+
+            with self.assertRaisesRegex(RuntimeError, "generated an invalid transcription JSON"):
+                WhisperTool()._get_transcription_json(audio)
+
+            self.assertFalse(cache.exists())
 
 
 if __name__ == "__main__":
